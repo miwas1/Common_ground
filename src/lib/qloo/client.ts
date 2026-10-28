@@ -59,7 +59,12 @@ export type QlooClientOptions = {
   cache?: QlooCache;
   onCall?: (record: QlooCallRecord) => void | Promise<void>;
   timeoutMs?: number;
+  /** Retries for transient failures (5xx, network, timeout). */
   maxRetries?: number;
+  /** Extra attempts after HTTP 429, each waiting for Qloo's stated reset. */
+  maxRateLimitRetries?: number;
+  /** Request pacing, shared by every client in the process for the same base URL. Qloo allows 10/s. */
+  requestsPerSecond?: number;
   fetchImpl?: typeof fetch;
 };
 
@@ -103,6 +108,24 @@ function errorFor(httpStatus: number, body: string): QlooError {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// Process-wide pacing per base URL: each request reserves the next free slot, so concurrent
+// callers (parallel pipeline stages, several QlooClient instances) stay under Qloo's per-second limit.
+const nextSlotAt = new Map<string, number>();
+
+async function acquireSlot(key: string, requestsPerSecond: number) {
+  const interval = 1000 / requestsPerSecond;
+  const now = Date.now();
+  const slot = Math.max(now, nextSlotAt.get(key) ?? 0);
+  nextSlotAt.set(key, slot + interval);
+  if (slot > now) await sleep(slot - now);
+}
+
+/** Seconds until Qloo's per-second window resets (x-second-ratelimit-reset), as milliseconds. */
+function rateLimitResetMs(res: Response): number {
+  const reset = Number(res.headers.get("x-second-ratelimit-reset") ?? res.headers.get("retry-after"));
+  return Number.isFinite(reset) && reset > 0 ? Math.min(reset, 10) * 1000 : 1000;
+}
+
 export class QlooClient {
   private readonly opts: Required<Omit<QlooClientOptions, "onCall" | "cache">> &
     Pick<QlooClientOptions, "onCall" | "cache">;
@@ -112,6 +135,8 @@ export class QlooClient {
     this.opts = {
       timeoutMs: 30_000,
       maxRetries: 2,
+      maxRateLimitRetries: 5,
+      requestsPerSecond: 8,
       fetchImpl: fetch,
       ...options,
       baseUrl: options.baseUrl.replace(/\/+$/, ""),
@@ -144,14 +169,24 @@ export class QlooClient {
     let lastError: QlooError | undefined;
     let httpStatus: number | undefined;
 
+    let rateLimited = 0;
     for (let attempt = 0; attempt <= this.opts.maxRetries; attempt++) {
       if (attempt > 0) await sleep(500 * 2 ** (attempt - 1) + Math.random() * 250);
       try {
+        await acquireSlot(this.opts.baseUrl, this.opts.requestsPerSecond);
         const res = await this.opts.fetchImpl(url, {
           headers: { "X-Api-Key": this.opts.apiKey, accept: "application/json" },
           signal: AbortSignal.timeout(this.opts.timeoutMs),
         });
         httpStatus = res.status;
+        if (res.status === 429 && rateLimited < this.opts.maxRateLimitRetries) {
+          // Wait for the window Qloo reports, without spending a transient-failure retry.
+          rateLimited++;
+          await res.body?.cancel();
+          await sleep(rateLimitResetMs(res) + Math.random() * 250);
+          attempt--;
+          continue;
+        }
         if (!res.ok) {
           lastError = errorFor(res.status, await res.text().catch(() => ""));
           if (lastError.retryable) continue;

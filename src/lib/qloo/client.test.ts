@@ -66,6 +66,50 @@ describe("QlooClient", () => {
     expect(await cache.get(result.call.cacheKey)).toBeUndefined();
   });
 
+  it("paces requests across concurrent callers and client instances", async () => {
+    const times: number[] = [];
+    const fetchImpl = vi.fn(async () => {
+      times.push(Date.now());
+      return json({ n: 1 });
+    });
+    const make = () => new QlooClient({ apiKey: "k".repeat(12), baseUrl: "https://pace.test", fetchImpl, requestsPerSecond: 20 });
+    const [a, b] = [make(), make()];
+
+    await Promise.all(Array.from({ length: 6 }, (_, i) => (i % 2 ? a : b).get("/search", { q: i }, identity, never)));
+
+    const gaps = times.slice(1).map((t, i) => t - times[i]);
+    expect(Math.min(...gaps)).toBeGreaterThanOrEqual(40); // 50ms slots, allowing timer jitter
+  });
+
+  it("waits for Qloo's reset on 429 without using transient retries", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("", { status: 429, headers: { "x-second-ratelimit-reset": "0.05" } }))
+      .mockResolvedValueOnce(json({ n: 4 }));
+    const client = new QlooClient({ apiKey: "k".repeat(12), baseUrl: "https://rl.test", fetchImpl, maxRetries: 0 });
+
+    const result = await client.get("/search", {}, identity, never);
+    expect(result).toMatchObject({ status: "ok", data: { n: 4 } });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("gives up with QLOO_RATE_LIMIT once the 429 budget is spent", async () => {
+    const fetchImpl = vi.fn(
+      async () => new Response("", { status: 429, headers: { "x-second-ratelimit-reset": "0.01" } }),
+    );
+    const client = new QlooClient({
+      apiKey: "k".repeat(12),
+      baseUrl: "https://rl2.test",
+      fetchImpl,
+      maxRetries: 0,
+      maxRateLimitRetries: 2,
+    });
+
+    const result = await client.get("/search", {}, identity, never);
+    expect(result.status === "error" && result.error.code).toBe("QLOO_RATE_LIMIT");
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+  });
+
   it("reports empty results distinctly from errors", async () => {
     const client = new QlooClient({
       apiKey: "k".repeat(12),

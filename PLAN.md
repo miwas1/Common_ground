@@ -39,6 +39,8 @@ Past winners (GeoTaste, Alloy, Resonance AI) were decision tools for a specific 
 | ✅ `/v2/audiences?filter.query=coffee` → `urn:audience:leisure:coffee`, which works as `signal.demographics.audiences`. | Brief audience descriptors map onto Qloo audience segments. |
 | **Affinity scores are normalized per query** (Qloo docs: *interpreting-affinity-scores*). | **Scores from different requests are never averaged or compared.** Comparisons happen within one query, by rank (§4.3). |
 | Responses are heavy (10–250 KB) and calls take 1–5 seconds. | The client trims responses, caches them privately in Postgres and runs calls in parallel. *(Built.)* |
+| **Rate limits (from response headers): 10 requests/second and 50,000/month per key.** A burst of 16 parallel calls returned six 429s. | The client paces all requests process-wide at 8/s and waits for `x-second-ratelimit-reset` on a 429, separately from transient retries. Bursts of 32 now succeed. The monthly cap makes the private cache mandatory: a fresh roster seed costs about 106 live calls, and a reseed costs none. *(Built.)* |
+| Entity search often returns several exact-name matches (*The Office* US and UK, *Queer Eye*), and some canonical names differ from everyday ones (*The Great British Baking Show*, *Brompton Bicycle*). | `src/lib/qloo/resolve.ts` confirms only a single exact match of the right type, or a clearly dominant one (popularity ≥ 0.9 and 0.05 ahead). Everything else becomes `needs_input` with candidates. Themes need an exact tag name, preferring lifestyle, then hobby, then aesthetic. *(Built.)* |
 
 ---
 
@@ -277,7 +279,7 @@ Accessibility baseline: keyboard navigation, visible focus, AA contrast, reduced
 2. ✅ **Qloo client** with cache, provenance, unit tests and live contract tests.
 3. ✅ **Foundation spikes**: Workflow SDK and Better Auth both proven on PGlite (§13).
 4. ✅ **Schema v2** (§5) linked to identity tables (10 foreign keys, `org_profile`), **`authorize()`** with an 11-case test matrix, and **demo users and orgs** seeded through Better Auth (`pnpm db:seed`).
-5. **Seed**: roster, portfolio, quotes, and resolved references and themes.
+5. ✅ **Seed**: 30 fictional creators (US, UK, DE) with 71 portfolio pieces, 41 quotes, and **120/120 references and 79/79 themes confirmed** through Qloo (`pnpm db:seed`). Imagery is still to come with Blob storage.
 6. **Claims engine**: finding templates, binding validator, interpretation rules, with tests first.
 7. **Workflow + stages 1–6** → Strategy tab. *This is the first end-to-end demo.*
 8. **Stages 7–9** → proposals, proposal page, evidence drawer, packages.

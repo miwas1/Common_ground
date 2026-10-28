@@ -140,7 +140,7 @@ The docs MCP (`https://docs.qloo.com/mcp`, no key needed) is for looking things 
 7. **Write-up:** problem → who → how it works (diagram) → which Qloo endpoints and why → example request→result → limitations. Add screenshots, because judges may never open the app.
 
 ## 8. Practical build notes
-- Rate and monthly quota limits apply but are "set high", and they can be raised via Discord #api-help.
+- Rate limits, measured from response headers on 2026-10-28: **10 requests/second** (`x-second-ratelimit-*`) and **50,000/month** (`x-month-ratelimit-*`) per key. They can be raised via Discord #api-help.
 - Data coverage in the hackathon environment may be patchy for some regions or entities. Test your demo scenarios early and pick ones with rich results.
 - The response always includes verbose fields like `akas`, so trim them server-side before sending to the LLM to save tokens.
 - Deploy target: any host that keeps the key server-side (Vercel/Next.js API routes, Cloudflare Workers, Fly or Render). Choose a container/VM only if you use `qloo mcp`.
