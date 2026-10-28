@@ -2,8 +2,10 @@
 // Called from durable workflow steps (src/workflows/research.ts). Failures that a retry cannot fix
 // stop the run immediately (FatalError); others are rethrown so the step is retried.
 
+import { eq } from "drizzle-orm";
 import { FatalError } from "workflow";
 import { getDb } from "@/db";
+import { campaign as campaignTable } from "@/db/schema";
 import { anthropicLlm, LlmRefusalError, LlmValidationError } from "@/lib/llm";
 import { isCancelRequested, markStage, setRunStatus } from "@/lib/runs/stages";
 import { qlooFor } from "@/lib/qloo/server";
@@ -34,6 +36,14 @@ export async function executeStage(runId: string, position: number) {
     }
     throw err;
   }
+}
+
+/** A finished run: its campaign moves on to reviewing proposals. */
+export async function completeRun(runId: string) {
+  const db = await getDb();
+  await setRunStatus(runId, "done");
+  const { campaign } = await loadRun(db, runId);
+  await db.update(campaignTable).set({ status: "reviewing_proposals" }).where(eq(campaignTable.id, campaign.id));
 }
 
 export async function failRun(runId: string, message: string) {

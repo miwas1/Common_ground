@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildPackages, type PlanItem } from "./stages/budget";
-import { bandFor, bestBand, shortlistOrder } from "./stages/cast";
+import { bandFor, bestBand, shortlistOrder, withoutKeys } from "./stages/cast";
 import { convertCents } from "./money";
 
 describe("cultural bands", () => {
@@ -67,5 +67,13 @@ describe("money", () => {
     expect(convertCents(100_000, "GBP", "USD")).toBe(127_000);
     expect(convertCents(127_000, "USD", "GBP")).toBe(100_000);
     expect(() => convertCents(1, "JPY", "USD")).toThrow();
+  });
+});
+
+describe("capability reasons", () => {
+  it("drops creator and portfolio keys the model leaves in prose", () => {
+    expect(withoutKeys("Hosting videos (P2, P3) show a warm counter style.")).toBe("Hosting videos show a warm counter style.");
+    expect(withoutKeys("Kitchen work (P12) for C4 fits.")).toBe("Kitchen work for fits.");
+    expect(withoutKeys("No relevant work.")).toBe("No relevant work.");
   });
 });

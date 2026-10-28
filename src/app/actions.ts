@@ -8,7 +8,7 @@ import { getDb } from "@/db";
 import { run } from "@/db/schema";
 import { getActor, requireAuthorized, UnauthenticatedError } from "@/lib/auth/actor";
 import { getAuth } from "@/lib/auth/server";
-import { createCampaignFromForm } from "@/lib/campaigns/create";
+import { BriefError, createCampaignFromForm } from "@/lib/campaigns/create";
 import { resolveAndResume, retryResearch, runCampaign } from "@/lib/campaigns/runs";
 import { DEMO_ACCOUNTS, type DemoRole } from "@/lib/demo/accounts";
 
@@ -22,9 +22,16 @@ export async function signInAsDemo(role: DemoRole) {
   redirect(role === "brand" ? "/brand" : "/creator");
 }
 
-export async function signInWithEmail(form: FormData) {
+/** State returned to an `ActionForm` when an action fails in a way the user can fix. */
+export type FormState = { error?: string } | undefined;
+
+export async function signInWithEmail(_prev: FormState, form: FormData): Promise<FormState> {
   const auth = await getAuth();
-  await auth.api.signInEmail({ body: { email: str(form, "email"), password: str(form, "password") }, headers: await headers() });
+  try {
+    await auth.api.signInEmail({ body: { email: str(form, "email"), password: str(form, "password") }, headers: await headers() });
+  } catch {
+    return { error: "That email and password don't match an account." };
+  }
   redirect("/brand");
 }
 
@@ -34,10 +41,16 @@ export async function signOut() {
   redirect("/");
 }
 
-export async function createCampaign(form: FormData) {
+export async function createCampaign(_prev: FormState, form: FormData): Promise<FormState> {
   const actor = await getActor();
   if (!actor) throw new UnauthenticatedError();
-  const campaignId = await createCampaignFromForm(actor, form);
+  let campaignId: string;
+  try {
+    campaignId = await createCampaignFromForm(actor, form);
+  } catch (err) {
+    if (err instanceof BriefError) return { error: err.message };
+    throw err;
+  }
   redirect(`/brand/campaigns/${campaignId}`);
 }
 

@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { createCampaign } from "@/app/actions";
+import { ActionForm } from "@/components/action-form";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,26 +8,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { pageActor } from "@/lib/auth/page";
+import { EXAMPLE_BRIEF as EXAMPLE } from "@/lib/demo/example-brief";
 
 const SELECT = "h-9 w-full rounded-md border border-input bg-background px-3 text-sm";
 
-// The example brief (fictional brand; real public references) so a first run takes one click.
-const EXAMPLE = {
-  name: "Summer cold brew launch",
-  brandName: "Juniper Coffee",
-  productName: "Cold Brew Concentrate",
-  productDescription: "A coffee concentrate for making iced coffee and coffee desserts at home in under a minute.",
-  objective: "Launch in the US with original creator-made videos for paid social; learn which creative world to scale.",
-  notes:
-    "Customer interviews: people who buy specialty coffee like Blue Bottle Coffee and Stumptown Coffee Roasters, listen to Khruangbin, and watch The Bear. Our team believes they cook and host at home.",
-  deliverables: "3 vertical videos with 6 opening hooks; paid usage for 12 months",
-  constraints: "No alcohol pairings. No claims about caffeine or health.",
-  audience: [
-    { text: "Customers mention Khruangbin and The Bear in interviews", source: "research" },
-    { text: "They enjoy home cooking and hosting friends", source: "assumption" },
-    { text: "Specialty coffee drinkers in their late twenties and thirties", source: "team" },
-  ],
-};
 
 const SOURCES = [
   { value: "research", label: "From customer research" },
@@ -37,7 +22,7 @@ const SOURCES = [
 async function NewCampaignForm() {
   await pageActor();
   return (
-    <form action={createCampaign} className="mt-6 grid gap-6 lg:grid-cols-[1fr_320px]">
+    <ActionForm action={createCampaign} className="mt-6 grid gap-6 lg:grid-cols-[1fr_320px]" errorClassName="lg:col-span-2">
       <div className="grid gap-6">
         <Card>
           <CardHeader>
@@ -142,7 +127,7 @@ async function NewCampaignForm() {
           The research runs in the background and keeps going if you leave this page. Qloo results describe aggregate affinities, not individual people.
         </p>
       </div>
-    </form>
+    </ActionForm>
   );
 }
 

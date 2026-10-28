@@ -2,7 +2,7 @@
 // automatic retries, recovery after crashes, and cancellation.
 
 import { createHook } from "workflow";
-import { executeStage, failRun } from "@/lib/pipeline/execute";
+import { completeRun, executeStage, failRun } from "@/lib/pipeline/execute";
 import { markStage, setRunStatus } from "@/lib/runs/stages";
 import { stageName } from "@/lib/pipeline/stages";
 
@@ -48,7 +48,7 @@ async function resumeAfterChoices(runId: string) {
 
 async function finish(runId: string) {
   "use step";
-  await setRunStatus(runId, "done");
+  await completeRun(runId);
 }
 
 async function fail(runId: string, message: string) {

@@ -10,6 +10,7 @@ import { getDb } from "@/db";
 import { member } from "@/db/auth-schema";
 import { campaign } from "@/db/schema";
 import { pageActor } from "@/lib/auth/page";
+import { findShowcase } from "@/lib/demo/showcase";
 
 const STATUS_LABEL: Record<string, string> = {
   brief_draft: "Brief draft",
@@ -27,31 +28,52 @@ async function Campaigns() {
     ? await db.select().from(campaign).where(inArray(campaign.organizationId, orgIds)).orderBy(desc(campaign.createdAt))
     : [];
 
-  if (rows.length === 0) {
-    return (
-      <Card className="mt-6">
+  const showcase = await findShowcase(db);
+  const showcaseCard = showcase && (
+    <Link href={`/brand/campaigns/${showcase.id}`} className="mt-6 block">
+      <Card className="transition hover:ring-primary/40">
         <CardHeader>
-          <CardTitle>Start your first campaign</CardTitle>
-          <CardDescription>Describe the product, the audience you know about and the work you need. The agent researches cultural directions and drafts collaboration proposals.</CardDescription>
+          <CardTitle>Showcase: cold brew concentrate launch</CardTitle>
+          <CardDescription className="flex flex-wrap items-center gap-2">
+            <Badge variant="secondary">Read-only</Badge>
+            A finished example: the example brief researched with real Qloo data, from cultural directions to proposals and budget packages.
+          </CardDescription>
         </CardHeader>
       </Card>
+    </Link>
+  );
+
+  if (rows.length === 0) {
+    return (
+      <>
+        {showcaseCard}
+        <Card className="mt-3">
+          <CardHeader>
+            <CardTitle>Start your first campaign</CardTitle>
+            <CardDescription>Describe the product, the audience you know about and the work you need. The agent researches cultural directions and drafts collaboration proposals.</CardDescription>
+          </CardHeader>
+        </Card>
+      </>
     );
   }
   return (
-    <div className="mt-6 grid gap-3 sm:grid-cols-2">
-      {rows.map((c) => (
-        <Link key={c.id} href={`/brand/campaigns/${c.id}`}>
-          <Card className="transition hover:ring-primary/40">
-            <CardHeader>
-              <CardTitle>{c.name}</CardTitle>
-              <CardDescription>
-                <Badge variant="secondary">{STATUS_LABEL[c.status] ?? c.status}</Badge>
-              </CardDescription>
-            </CardHeader>
-          </Card>
-        </Link>
-      ))}
-    </div>
+    <>
+      {showcaseCard}
+      <div className="mt-6 grid gap-3 sm:grid-cols-2">
+        {rows.map((c) => (
+          <Link key={c.id} href={`/brand/campaigns/${c.id}`}>
+            <Card className="transition hover:ring-primary/40">
+              <CardHeader>
+                <CardTitle>{c.name}</CardTitle>
+                <CardDescription>
+                  <Badge variant="secondary">{STATUS_LABEL[c.status] ?? c.status}</Badge>
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          </Link>
+        ))}
+      </div>
+    </>
   );
 }
 

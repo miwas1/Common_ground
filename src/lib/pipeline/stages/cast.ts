@@ -144,13 +144,22 @@ async function culturalBands(ctx: StageCtx, p: DirectionProfile, roster: RosterE
   );
 }
 
+/** Creator and portfolio keys (C3, P12) belong in the key fields; drop any the model leaves in prose. */
+export const withoutKeys = (text: string) =>
+  text
+    .replace(/\(\s*[CP]\d+(?:\s*(?:,|;|\/|&|and)\s*[CP]\d+)*\s*\)/g, "")
+    .replace(/\b[CP]\d+\b/g, "")
+    .replace(/\s+([,.;:])/g, "$1")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
 const CapabilitySchema = z.object({
   judgments: z.array(
     z.object({
       creator: z.string().describe("Creator key, e.g. C3"),
       level: z.enum(["strong", "partial", "none"]),
       portfolio: z.array(z.string()).describe("Portfolio keys (P…) that show the capability; empty only when level is none"),
-      reason: z.string(),
+      reason: z.string().describe("Why, in words; no keys or numbers"),
     }),
   ),
 });
@@ -172,7 +181,7 @@ async function judgeCapability(ctx: StageCtx, p: DirectionProfile, candidates: R
     ctx.llm,
     {
       name: "judge capability",
-      system: `You are a creative producer judging whether creators can execute a campaign direction, using only their portfolio. Judge the work, never follower counts or personal taste. Reasons are short and cite portfolio keys.\n${PROSE_RULES}`,
+      system: `You are a creative producer judging whether creators can execute a campaign direction, using only their portfolio. Judge the work, never follower counts or personal taste. Cite work by listing its keys in "portfolio"; the reason is a short sentence in words, with no keys.\n${PROSE_RULES}`,
       prompt: `<direction>\n${p.direction.title} — ${p.direction.audienceContext}\nProduct role: ${p.direction.productRole}\nScene ideas: ${(art.sceneIdeas ?? []).join("; ")}\nSettings: ${(art.settings ?? []).join("; ")}\n</direction>\n<creators>\n${lines.join("\n")}\n</creators>\nJudge every creator exactly once.`,
       schema: CapabilitySchema,
       effort: "medium",
@@ -189,7 +198,7 @@ async function judgeCapability(ctx: StageCtx, p: DirectionProfile, candidates: R
         for (const k of j.portfolio) {
           if (pKeys.get(k)?.creatorId !== candidates[idx].creator.id) issues.push({ path: `judgments[${i}].portfolio`, message: `${k} is not this creator's work` });
         }
-        issues.push(...checkInterpretation(j.reason, `judgments[${i}].reason`));
+        issues.push(...checkInterpretation(withoutKeys(j.reason), `judgments[${i}].reason`));
       });
       if (seen.size !== candidates.length) issues.push({ path: "judgments", message: `judge all ${candidates.length} creators` });
       return issues;
@@ -198,7 +207,7 @@ async function judgeCapability(ctx: StageCtx, p: DirectionProfile, candidates: R
   return new Map(
     out.judgments.map((j) => [
       candidates[Number(j.creator.replace(/\D/g, "")) - 1].creator.id,
-      { level: j.level, reason: j.reason, portfolioItemIds: j.portfolio.map((k) => pKeys.get(k)!.id) } satisfies Capability,
+      { level: j.level, reason: withoutKeys(j.reason), portfolioItemIds: j.portfolio.map((k) => pKeys.get(k)!.id) } satisfies Capability,
     ]),
   );
 }

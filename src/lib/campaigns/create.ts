@@ -13,6 +13,9 @@ import { startResearch } from "@/lib/pipeline/start";
 
 const str = (form: FormData, key: string) => String(form.get(key) ?? "").trim();
 
+/** A problem with the brief the user can fix; its message is shown beside the form. */
+export class BriefError extends Error {}
+
 /** The brand organization the actor is working in: their active org if it is a brand they belong to. */
 async function actingBrandOrg(userId: string, activeOrganizationId: string | null) {
   const db = await getDb();
@@ -29,9 +32,9 @@ const LANGUAGE_FOR: Record<string, string> = { US: "en", GB: "en", DE: "de" };
 
 export async function createCampaignFromForm(actor: Actor & { activeOrganizationId: string | null }, form: FormData) {
   const organizationId = await actingBrandOrg(actor.userId, actor.activeOrganizationId);
-  if (!organizationId) throw new Error("Join or create a brand organization first");
+  if (!organizationId) throw new BriefError("Join or create a brand organization first.");
   const markets = MARKETS.filter((m) => form.get(`market_${m}`) === "on");
-  if (markets.length === 0) throw new Error("Choose at least one market");
+  if (markets.length === 0) throw new BriefError("Choose at least one market.");
   const brief: BriefForm = {
     brandName: str(form, "brandName"),
     product: { name: str(form, "productName"), description: str(form, "productDescription") },
@@ -40,7 +43,7 @@ export async function createCampaignFromForm(actor: Actor & { activeOrganization
     deliverables: str(form, "deliverables"),
     constraints: str(form, "constraints"),
   };
-  if (!brief.brandName || !brief.product.name) throw new Error("Brand and product are required");
+  if (!brief.brandName || !brief.product.name) throw new BriefError("Add the brand and the product.");
   const budget = Number(str(form, "budget").replace(/[^\d.]/g, ""));
   const audience = [0, 1, 2, 3, 4]
     .map((i) => ({ text: str(form, `audience_${i}`), source: str(form, `audience_source_${i}`) }))

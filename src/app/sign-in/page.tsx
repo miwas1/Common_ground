@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { signInAsDemo, signInWithEmail } from "@/app/actions";
+import { ActionForm } from "@/components/action-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -29,7 +30,7 @@ export default function SignInPage() {
 
       <Separator className="my-6" />
 
-      <form action={signInWithEmail} className="grid gap-3">
+      <ActionForm action={signInWithEmail} className="grid gap-3">
         <div className="grid gap-1.5">
           <Label htmlFor="email">Email</Label>
           <Input id="email" name="email" type="email" autoComplete="email" required />
@@ -39,7 +40,7 @@ export default function SignInPage() {
           <Input id="password" name="password" type="password" autoComplete="current-password" required />
         </div>
         <Button type="submit" variant="secondary">Sign in with email</Button>
-      </form>
+      </ActionForm>
     </main>
   );
 }

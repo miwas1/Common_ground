@@ -16,7 +16,8 @@
     "db:reset": "rm -rf .pglite",
     "auth:generate": "auth generate --config auth.cli.ts --adapter drizzle --dialect postgresql --output src/db/auth-schema.ts -y && drizzle-kit generate",
     "db:seed": "tsx scripts/seed-demo.ts",
-    "db:deploy": "tsx scripts/migrate.ts && tsx scripts/seed-demo.ts"
+    "db:showcase": "tsx scripts/seed-showcase.ts",
+    "db:deploy": "tsx scripts/migrate.ts && tsx scripts/seed-demo.ts && tsx scripts/seed-showcase.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.3.0",
