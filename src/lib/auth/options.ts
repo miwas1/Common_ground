@@ -11,9 +11,29 @@ export const invitationPath = (invitationId: string) => `/invitations/${invitati
 
 // `satisfies` (not a return annotation) keeps the plugin types, so `auth.api` exposes plugin
 // endpoints such as createOrganization and sessions carry activeOrganizationId.
+const https = (host?: string) => (host ? `https://${host}` : undefined);
+
+/**
+ * Public origin. BETTER_AUTH_URL wins; on Vercel it is derived from system environment variables
+ * (production domain in production, the branch URL on previews), so previews sign in correctly.
+ */
+function baseURL() {
+  if (process.env.BETTER_AUTH_URL) return process.env.BETTER_AUTH_URL;
+  if (process.env.VERCEL_ENV === "production") return https(process.env.VERCEL_PROJECT_PRODUCTION_URL);
+  return https(process.env.VERCEL_BRANCH_URL ?? process.env.VERCEL_URL);
+}
+
+/** Every URL a Vercel deployment can be reached at (unique deployment URL, branch URL, production domain). */
+const vercelOrigins = () =>
+  [process.env.VERCEL_URL, process.env.VERCEL_BRANCH_URL, process.env.VERCEL_PROJECT_PRODUCTION_URL]
+    .map(https)
+    .filter((o): o is string => Boolean(o));
+
 export function authOptions() {
   return {
     appName: "Common Ground",
+    baseURL: baseURL(),
+    trustedOrigins: vercelOrigins(),
     emailAndPassword: { enabled: true },
     plugins: [
       organization({
