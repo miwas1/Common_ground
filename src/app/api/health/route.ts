@@ -14,6 +14,10 @@ export async function GET() {
       db: driver,
       qlooConfigured: Boolean(process.env.QLOO_API_KEY),
       llmConfigured: Boolean(process.env.ANTHROPIC_API_KEY),
+      authConfigured: Boolean(process.env.BETTER_AUTH_SECRET),
+      // Research runs need Vercel's system environment variables on Vercel (Workflow reads
+      // VERCEL_DEPLOYMENT_ID to pick its managed backend); locally the filesystem backend is used.
+      workflowBackend: process.env.VERCEL_DEPLOYMENT_ID ? "vercel" : process.env.VERCEL ? "MISSING system env vars" : "local",
     });
   } catch (err) {
     return Response.json({ ok: false, db: driver, error: (err as Error).message }, { status: 503 });
