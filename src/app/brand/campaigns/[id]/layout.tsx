@@ -56,7 +56,7 @@ async function Header({ params }: { params: Promise<{ id: string }> }) {
 
 export default function CampaignLayout({ children, params }: { children: ReactNode; params: Promise<{ id: string }> }) {
   return (
-    <AppShell area="brand">
+    <AppShell>
       <Suspense fallback={<Skeleton className="h-28 w-full" />}>
         <Header params={params} />
       </Suspense>

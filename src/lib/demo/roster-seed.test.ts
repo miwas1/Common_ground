@@ -1,11 +1,10 @@
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { openPglite, type Db } from "@/db";
-import { member } from "@/db/auth-schema";
+import { member, organization } from "@/db/auth-schema";
 import { creator, creatorReference, creatorTheme, orgProfile, portfolioItem, quote } from "@/db/schema";
 import { createAuth } from "@/lib/auth/create";
 import type { QlooApi } from "@/lib/qloo/api";
-import { DEMO_ACCOUNTS } from "./accounts";
 import { ROSTER } from "./roster";
 import { seedRoster } from "./roster-seed";
 import { seedDemoIdentities } from "./seed";
@@ -22,12 +21,10 @@ const fakeApi = {
 
 describe("roster seed", { timeout: 60_000 }, () => {
   let db: Db;
-  let demoCreatorUserId: string;
 
   beforeAll(async () => {
     db = await openPglite("memory://");
-    const seeded = await seedDemoIdentities(db, createAuth(db), "demo-password-123");
-    demoCreatorUserId = seeded.find((s) => s.role === "creator")!.userId;
+    await seedDemoIdentities(db, createAuth(db), "demo-password-123");
   });
 
   it("creates every creator with portfolio, quotes, references and themes, and is idempotent", async () => {
@@ -58,16 +55,16 @@ describe("roster seed", { timeout: 60_000 }, () => {
     expect(confirmed.every((r) => r.confirmed && r.qlooId === "E:The Bear")).toBe(true);
   });
 
-  it("attaches Maya to the demo creator login and keeps roster orgs memberless", async () => {
+  it("keeps roster orgs memberless, and Maya under her original org slug", async () => {
     const [maya] = await db.select().from(creator).where(eq(creator.displayName, "Maya L."));
-    const memberships = await db.select().from(member).where(eq(member.organizationId, maya.organizationId));
-    expect(memberships.map((m) => m.userId)).toEqual([demoCreatorUserId]);
+    expect(await db.select().from(member).where(eq(member.organizationId, maya.organizationId))).toHaveLength(0);
+    const [mayaOrg] = await db.select().from(organization).where(eq(organization.id, maya.organizationId));
+    expect(mayaOrg.slug).toBe("demo-maya-l-studio");
 
     const [theo] = await db.select().from(creator).where(eq(creator.displayName, "Theo Okafor"));
     expect(await db.select().from(member).where(eq(member.organizationId, theo.organizationId))).toHaveLength(0);
     const [profile] = await db.select().from(orgProfile).where(eq(orgProfile.organizationId, theo.organizationId));
     expect(profile).toMatchObject({ kind: "creator", isDemo: true });
-    expect(DEMO_ACCOUNTS.creator.user.name).toBe("Maya L.");
   });
 
   it("keeps follower data off production-only creators", async () => {

@@ -142,7 +142,7 @@ function Field({ label, name, ...props }: { label: string; name: string } & Reac
 
 export default function NewCampaignPage() {
   return (
-    <AppShell area="brand">
+    <AppShell>
       <h1 className="text-2xl font-semibold tracking-tight">New campaign</h1>
       <p className="mt-1 text-sm text-muted-foreground">The example brief is filled in. Change anything, or run it as it is.</p>
       <Suspense>

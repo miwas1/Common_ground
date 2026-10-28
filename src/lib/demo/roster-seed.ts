@@ -8,7 +8,6 @@ import { organization } from "@/db/auth-schema";
 import { creator, creatorReference, creatorTheme, orgProfile, portfolioItem, quote } from "@/db/schema";
 import type { QlooApi } from "@/lib/qloo/api";
 import { resolveEntity, resolveTheme, type Resolution } from "@/lib/qloo/resolve";
-import { DEMO_ACCOUNTS } from "./accounts";
 import { ROSTER, type RosterCreator } from "./roster";
 
 const QUOTE_VALIDITY_DAYS = 60;
@@ -24,14 +23,9 @@ async function findOrgBySlug(db: Db, slug: string) {
   return o?.id;
 }
 
-/** Roster-only creators get an organization without members: they appear in casting but cannot sign in. */
+/** Roster creators get an organization without members: they appear in casting but cannot sign in. */
 async function ensureCreatorOrg(db: Db, c: RosterCreator): Promise<string> {
-  if (c.account) {
-    const id = await findOrgBySlug(db, DEMO_ACCOUNTS[c.account].organization.slug);
-    if (!id) throw new Error(`Seed demo identities before the roster (missing ${c.account} account)`);
-    return id;
-  }
-  const slug = `demo-creator-${c.slug}`;
+  const slug = c.orgSlug ?? `demo-creator-${c.slug}`;
   const existing = await findOrgBySlug(db, slug);
   if (existing) return existing;
   const id = crypto.randomUUID();

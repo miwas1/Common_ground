@@ -38,14 +38,11 @@ export default function Home() {
         <Button size="lg" asChild>
           <a href="/showcase">Open the finished showcase</a>
         </Button>
-        <form action={signInAsDemo.bind(null, "brand")}>
-          <Button size="lg" type="submit" variant="outline">Enter as brand</Button>
-        </form>
-        <form action={signInAsDemo.bind(null, "creator")}>
-          <Button size="lg" type="submit" variant="outline">Enter as creator</Button>
+        <form action={signInAsDemo}>
+          <Button size="lg" type="submit" variant="outline">Run it on a new brief</Button>
         </form>
       </div>
-      <p className="mt-3 text-sm text-muted-foreground">No sign-up. Demo accounts with a fictional brand and creators; research runs on real Qloo data.</p>
+      <p className="mt-3 text-sm text-muted-foreground">No sign-up. A demo brand account with a fictional brand and creator roster; research runs on real Qloo data.</p>
 
       <section className="mt-20 grid gap-4 sm:grid-cols-3">
         {steps.map((step, i) => (

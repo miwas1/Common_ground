@@ -1,18 +1,20 @@
 // Idempotent creation of the demo users and organizations through Better Auth
 // (so passwords are hashed and memberships created exactly as for real sign-ups).
 
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import type { Db } from "@/db";
 import { organization, user } from "@/db/auth-schema";
 import { orgProfile } from "@/db/schema";
 import type { Auth } from "@/lib/auth/create";
-import { DEMO_ACCOUNTS, type DemoRole } from "./accounts";
+import { DEMO_ACCOUNTS, RETIRED_DEMO_EMAILS, type DemoRole } from "./accounts";
 
 export type SeededAccount = { role: DemoRole; userId: string; organizationId: string; created: boolean };
 
 export async function seedDemoIdentities(db: Db, auth: Auth, password: string): Promise<SeededAccount[]> {
   if (password.length < 8) throw new Error("DEMO_PASSWORD must be at least 8 characters");
   const seeded: SeededAccount[] = [];
+  // Sessions and memberships go with the user (cascade); the creator's roster profile stays.
+  await db.delete(user).where(inArray(user.email, RETIRED_DEMO_EMAILS));
 
   for (const role of Object.keys(DEMO_ACCOUNTS) as DemoRole[]) {
     const account = DEMO_ACCOUNTS[role];

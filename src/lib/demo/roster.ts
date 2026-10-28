@@ -24,8 +24,8 @@ export type RosterCreator = {
   references: { label: string; type: QlooEntityType }[];
   themes: string[];
   portfolio: { title: string; role: string; formats: string[]; settings: string[]; themes: string[]; description: string }[];
-  /** Attach to a seeded demo login instead of creating a roster-only organization. */
-  account?: "creator";
+  /** Organization slug when it differs from `demo-creator-<slug>` (kept so existing databases don't duplicate the creator). */
+  orgSlug?: string;
 };
 
 const artist = (label: string) => ({ label, type: "urn:entity:artist" as const });
@@ -82,7 +82,7 @@ export const ROSTER: RosterCreator[] = [
         description: "The morning-after coffee ritual, shot in one take as the city wakes.",
       },
     ],
-    account: "creator",
+    orgSlug: "demo-maya-l-studio",
   },
   {
     slug: "theo-okafor",

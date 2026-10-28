@@ -11,16 +11,16 @@ import { getAuth } from "@/lib/auth/server";
 import { BriefError, createCampaignFromForm } from "@/lib/campaigns/create";
 import { RevisionError, type RevisionChange } from "@/lib/campaigns/revisions";
 import { refineCampaign, resolveAndResume, retryResearch, runCampaign } from "@/lib/campaigns/runs";
-import { DEMO_ACCOUNTS, type DemoRole } from "@/lib/demo/accounts";
+import { DEMO_ACCOUNTS } from "@/lib/demo/accounts";
 
 const str = (form: FormData, key: string) => String(form.get(key) ?? "").trim();
 
-export async function signInAsDemo(role: DemoRole) {
+export async function signInAsDemo() {
   const password = process.env.DEMO_PASSWORD;
   if (!password) throw new Error("Demo access is not configured");
   const auth = await getAuth();
-  await auth.api.signInEmail({ body: { email: DEMO_ACCOUNTS[role].user.email, password }, headers: await headers() });
-  redirect(role === "brand" ? "/brand" : "/creator");
+  await auth.api.signInEmail({ body: { email: DEMO_ACCOUNTS.brand.user.email, password }, headers: await headers() });
+  redirect("/brand");
 }
 
 /** State returned to an `ActionForm` when an action fails in a way the user can fix. */

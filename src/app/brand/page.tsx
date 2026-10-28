@@ -79,7 +79,7 @@ async function Campaigns() {
 
 export default function BrandHome() {
   return (
-    <AppShell area="brand">
+    <AppShell>
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold tracking-tight">Campaigns</h1>
         <Button asChild>

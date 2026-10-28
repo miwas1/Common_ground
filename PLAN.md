@@ -11,7 +11,7 @@ This plan builds on [RESEARCH.md](RESEARCH.md) (hackathon rules and the Qloo API
 | Judging criterion | How Common Ground scores |
 |---|---|
 | **Technological implementation** | Uses 8 distinct Qloo capabilities in one durable agent pipeline. Every factual claim is **bound to a specific stored Qloo result: field, value and query**. Scores are never written by the model. Inputs are tested for sensitivity, and every refinement creates an immutable revision. |
-| **Design** | One complete journey: brief → strategy → proposals → challenge → agree → creator draft → review. It's real, works end to end, and runs between two real accounts (brand and creator). |
+| **Design** | One complete brand-side journey: brief → strategy → proposals → challenge an input → compare revisions → plan. It's real and works end to end on a real brand account. |
 | **Potential impact** | A specific buyer: brand and agency teams that already commission creator content. A specific pain: picking partners and writing differentiated briefs. A specific output: a proposal someone can pay for. |
 | **Quality of idea** | Qloo isn't used to "recommend creators". It finds the *shared cultural context* that gives a collaboration a reason to exist. The concept and the creator are a single decision. |
 | **Sponsor's test**: "would it work without Qloo?" | An **Evaluate** view runs a fair, blind comparison: the same brief, roster, portfolio metadata, constraints, model and output schema, with only the Qloo evidence removed. It shows where Qloo helps, adds little, or distracts. |
@@ -60,9 +60,9 @@ Every item is **built for real, end to end**. The tiers set what we build first 
 9. **Budget planner**: a deterministic optimizer over real quotes.
 10. **Showcase campaign** (precomputed, read-only, with *Duplicate to my workspace*) plus **"Run it on your brand"**.
 
-### P1: the two-sided loop
-11. **Creator workspace**: profile builder (proposition, portfolio, **confirmed** cultural references and themes), opportunities, and pitch / rewrite-the-hook. Each change creates a new **proposal version**.
-12. **Offer → accept → production**: acceptance is tied to an exact proposal version. Draft upload, version states, timestamped comments, and **approval of an exact asset version**, with every action authorized against org membership.
+### P1
+11. ~~**Creator workspace** and **offer → accept → production**~~ — **cut on 2026-10-28.** Common Ground is a tool for brand teams; creators exist only as the casting roster (fictional, with no login). Reasons: the strength is the brand-side analysis, past winners were single-buyer decision tools, and a two-sided flow built in the time left would look unfinished. The authorization model for offers stays in `authorize()` (tested) but has no UI.
+12. **Proposal export / share link**: the deliverable a brand team acts on (concept, hook, storyboard, deliverables, quote, evidence trail).
 13. **Evaluate view**: the blind with-Qloo / without-Qloo comparison (§4.6).
 14. **Compare up to 3 proposals**, and a **market adaptation** view.
 
@@ -121,7 +121,7 @@ Durable runs (Workflow SDK: "use workflow" per run, "use step" per stage)
 
 ### 3.3 Identity without friction
 - Real accounts and organizations. Brands work inside a brand org. Each creator owns a personal creator org.
-- **One-click demo access** on the landing page: *Enter as brand (Juniper Coffee demo)* and *Enter as creator (Maya L. demo)*. These sign in to real, seeded demo users. With the multi-session plugin, a judge can hold both sessions and **switch accounts** (not roles), so offers, acceptances and approvals really cross between two parties.
+- **One-click demo access** on the landing page: *Open the finished showcase* and *Run it on a new brief*, both signing in to the real, seeded demo brand user (Juniper Coffee). There is no creator login; the creator demo account seeded by earlier deploys is removed by `pnpm db:seed`.
 - Demo orgs reset on a schedule. The showcase campaign is read-only for everyone.
 
 ---
@@ -257,7 +257,7 @@ result(...) · learning(...) · event(id, campaign_id, actor_user_id, type, payl
 
 | Route | Contents |
 |---|---|
-| `/` | Promise, **Open showcase**, **Enter as brand**, **Enter as creator**, and "How it uses Qloo" |
+| `/` | Promise, **Open showcase**, **Run it on a new brief**, and "How it uses Qloo" |
 | `/brand` | Overview (P2) |
 | `/brand/campaigns/new` | Guided brief + live summary + paste/upload |
 | `/brand/campaigns/[id]` | Header (name · markets · type · budget · **revision selector**) + tabs **Strategy · Proposals · Production · Results** + run progress |
@@ -266,7 +266,6 @@ result(...) · learning(...) · event(id, campaign_id, actor_user_id, type, payl
 | `…/revisions` | Revision compare |
 | `…/evaluate` | Blind A/B comparison |
 | `…/plan` · `…/production` · `…/results` | Packages · collaboration and review · results |
-| `/creator` | Work · Opportunities · Portfolio · Business |
 | `/about/qloo` | Every endpoint used and why, the claim rules, and a redacted request→result example |
 
 Accessibility baseline: keyboard navigation, visible focus, AA contrast, reduced motion, captions, and stacked layouts on mobile.
@@ -284,7 +283,7 @@ Accessibility baseline: keyboard navigation, visible focus, AA contrast, reduced
 7. ✅ **Workflow + stages 1–6** (`src/workflows/research.ts`, `src/lib/pipeline/stages`) → Strategy tab, with live run progress, cancellation and the "Which did you mean?" pause.
 8. ✅ **Stages 7–9** → casting, proposals, proposal page with evidence trail, budget packages (indicative FX for mixed-currency quotes).
 9. ✅ **Revisions and refinement** + revision compare. *Challenge an input* on the Strategy tab removes a reference or audience statement, or changes the budget (`deriveRevision` in `src/lib/campaigns/revisions.ts`), then starts a full new run. The **Revisions** tab matches directions across revisions by their anchor findings (`src/lib/campaigns/compare.ts`) and shows anchors lost and gained, shortlist changes and package costs. The showcase ships with revision 2 (*Removed "Khruangbin"*) precomputed. Still to do: `edit_input`, `add_market`, `explain_choice`.
-10. **Creator workspace** → offers on exact versions → production and approvals.
+10. ~~**Creator workspace** → offers on exact versions → production and approvals~~ — cut (§2, item 11).
 11. **Evaluate** (baseline mode + blind A/B) + ablation script.
 12. ✅ **Showcase precompute**, landing page with demo entry, `/about/qloo`. The showcase is researched by the real pipeline during the Vercel build (`pnpm db:showcase`, skipped once done) and owned by a memberless org, so it is read-only. `/showcase` signs visitors in as the demo brand and opens it. *Duplicate to my workspace* is still to do.
 13. **Market adaptation**, compare-3, results, learnings, overview.
@@ -302,14 +301,14 @@ Accessibility baseline: keyboard navigation, visible focus, AA contrast, reduced
 - **Revision tests**: a refinement creates a new revision and run, nothing derived is shared, and the parent stays intact.
 - **Authorization tests**: a creator can't read another brand's campaign; acceptance needs the receiving org; approval binds to an exact asset version.
 - **Workflow tests**: a step retries after a transient failure, cancellation stops the next step, and only one active run is allowed per revision.
-- **E2E (Playwright)**: the showcase, then brand demo → run → proposal → offer → switch to creator → accept → upload → switch to brand → comment → approve.
+- **E2E (Playwright)**: the showcase, then brand demo → run → "Which did you mean?" → proposals → challenge an input → compare revisions.
 - **Ablation script**: runs with and without Qloo on the same inputs, saved privately and summarized honestly in the README.
 
 ---
 
 ## 10. Final-round pitch (if we make the top 3)
 
-The flow: problem → open the showcase → disambiguation → directions with findings vs interpretations → trace one proposal from finding to portfolio item to concept → **remove an input and compare revisions** → switch to the creator account, rewrite the hook, accept → close on the business: brands pay per campaign workspace, creators are free, and the moat is knowing *which creators execute which concepts for which cultural contexts*.
+The flow: problem → open the showcase → disambiguation → directions with findings vs interpretations → trace one proposal from finding to portfolio item to concept → **remove an input and compare revisions** → the Evaluate view (with vs without Qloo) → close on the business: brands pay per campaign workspace, creators are free, and the moat is knowing *which creators execute which concepts for which cultural contexts*.
 
 Angles per judge: Calacanis (business and wedge), Diolosa (claim binding, comparability within each query, honest coverage), Abrams and Boehly (the same engine fits live-event and sponsorship casting), Cedric (creators stay authors of the work).
 

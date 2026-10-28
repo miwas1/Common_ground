@@ -16,14 +16,11 @@ export default function SignInPage() {
       <Card className="mt-6">
         <CardHeader>
           <CardTitle>Try the demo</CardTitle>
-          <CardDescription>Real accounts with fictional data. Switch between the brand and the creator at any time.</CardDescription>
+          <CardDescription>A real brand account with a fictional brand and creator roster.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-2">
-          <form action={signInAsDemo.bind(null, "brand")}>
-            <Button type="submit" className="w-full">Enter as brand · Juniper Coffee (demo)</Button>
-          </form>
-          <form action={signInAsDemo.bind(null, "creator")}>
-            <Button type="submit" variant="outline" className="w-full">Enter as creator · Maya L. (demo)</Button>
+          <form action={signInAsDemo}>
+            <Button type="submit" className="w-full">Enter as Juniper Coffee (demo brand)</Button>
           </form>
         </CardContent>
       </Card>

@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { openPglite, type Db } from "@/db";
-import { member } from "@/db/auth-schema";
+import { member, user } from "@/db/auth-schema";
 import { orgProfile } from "@/db/schema";
 import { authorize } from "@/lib/auth/authorize";
 import { createAuth } from "@/lib/auth/create";
@@ -15,27 +15,31 @@ describe("demo identity seed", { timeout: 60_000 }, () => {
     db = await openPglite("memory://");
   });
 
-  it("creates a brand and a creator account that can sign in, and is idempotent", async () => {
+  it("creates the demo brand account that can sign in, and is idempotent", async () => {
     const auth = createAuth(db);
     const first = await seedDemoIdentities(db, auth, "demo-password-123");
     const second = await seedDemoIdentities(db, auth, "demo-password-123");
 
-    expect(first.map((s) => s.created)).toEqual([true, true]);
-    expect(second.map((s) => s.created)).toEqual([false, false]);
-    expect(second.map((s) => s.organizationId)).toEqual(first.map((s) => s.organizationId));
+    expect(first.map((s) => [s.role, s.created])).toEqual([["brand", true]]);
+    expect(second.map((s) => s.created)).toEqual([false]);
+    expect(second[0].organizationId).toBe(first[0].organizationId);
 
-    const [brand, creator] = first;
-    const profiles = await db.select().from(orgProfile);
-    expect(profiles.find((p) => p.organizationId === brand.organizationId)?.kind).toBe("brand");
-    expect(profiles.find((p) => p.organizationId === creator.organizationId)?.kind).toBe("creator");
+    const [brand] = first;
+    const [profile] = await db.select().from(orgProfile).where(eq(orgProfile.organizationId, brand.organizationId));
+    expect(profile.kind).toBe("brand");
     expect(await db.select().from(member).where(eq(member.userId, brand.userId))).toHaveLength(1);
 
-    const signIn = await auth.api.signInEmail({ body: { email: "maya.l@example.com", password: "demo-password-123" } });
-    expect(signIn.user.id).toBe(creator.userId);
+    const signIn = await auth.api.signInEmail({ body: { email: "alex.rivera@example.com", password: "demo-password-123" } });
+    expect(signIn.user.id).toBe(brand.userId);
 
-    // The demo creator cannot see the demo brand's campaigns.
     const { campaignId } = await createCampaign(db, { organizationId: brand.organizationId, userId: brand.userId });
-    await expect(authorize(db, { userId: creator.userId }, { type: "campaign.read", campaignId })).rejects.toThrow();
     await authorize(db, { userId: brand.userId }, { type: "campaign.write", campaignId });
+  });
+
+  it("removes the creator login that earlier deploys seeded", async () => {
+    const auth = createAuth(db);
+    await auth.api.signUpEmail({ body: { name: "Maya L.", email: "maya.l@example.com", password: "demo-password-123" } });
+    await seedDemoIdentities(db, auth, "demo-password-123");
+    expect(await db.select().from(user).where(eq(user.email, "maya.l@example.com"))).toEqual([]);
   });
 });
