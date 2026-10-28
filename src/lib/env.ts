@@ -6,7 +6,8 @@ const schema = z.object({
   QLOO_BASE_URL: z.url().default("https://hackathon.api.qloo.com"),
   DATABASE_URL: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
-  LLM_MODEL: z.string().default("claude-sonnet-5-5"),
+  LLM_MODEL: z.enum(["claude-sonnet-5-5", "claude-haiku-5-5"]).default("claude-sonnet-5-5"),
+  LLM_FAST_MODEL: z.enum(["claude-sonnet-5-5", "claude-haiku-5-5"]).default("claude-haiku-5-5"),
 });
 
 export type ServerEnv = z.infer<typeof schema>;

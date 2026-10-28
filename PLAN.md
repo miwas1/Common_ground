@@ -107,7 +107,7 @@ Durable runs (Workflow SDK: "use workflow" per run, "use step" per stage)
 | Qloo | `src/lib/qloo`: transport, trimming, typed API, DB cache, provenance | ✅ built, 6 live contract tests |
 | Durable runs | **Workflow SDK** (`workflow@5.2.3`, `withWorkflow` in `next.config.ts`, `src/instrumentation.ts`). Local backend in dev, Vercel-managed in production. | ✅ spike passed (§13) |
 | Auth | **Better Auth 1.7.14** + `@better-auth/drizzle-adapter` + `organization` + `multi-session` + `nextCookies` | ✅ spike passed (§13) |
-| LLM | **Claude Sonnet 5.5** for tool use and judgments, **Opus 5.5** for direction synthesis and proposal writing | Key present |
+| LLM | **Claude Sonnet 5.5** for every judgment and writing step, **Claude Haiku 5.5** for parsing the brief. No other model is allowed (`ALLOWED_MODELS` in `src/lib/llm`), and there is no refusal fallback to another model. System and stage prompts are cached, so validation retries and per-direction calls read from the cache. | ✅ |
 | Map | **MapLibre GL + deck.gl HeatmapLayer** | — |
 | Files | **Vercel Blob** (private access, checked against org membership) | — |
 | Host | **Vercel** | Waiting on repo and accounts |
@@ -283,13 +283,13 @@ Accessibility baseline: keyboard navigation, visible focus, AA contrast, reduced
 6. ✅ **Claims engine** (`src/lib/claims`): findings rendered by code from stored evidence; interpretation/claim content rules; bindings to evidence, findings, portfolio items and quotes; bounded re-ask loop (`objectWithValidation`).
 7. ✅ **Workflow + stages 1–6** (`src/workflows/research.ts`, `src/lib/pipeline/stages`) → Strategy tab, with live run progress, cancellation and the "Which did you mean?" pause.
 8. ✅ **Stages 7–9** → casting, proposals, proposal page with evidence trail, budget packages (indicative FX for mixed-currency quotes).
-9. **Revisions and refinement** + revision compare.
+9. ✅ **Revisions and refinement** + revision compare. *Challenge an input* on the Strategy tab removes a reference or audience statement, or changes the budget (`deriveRevision` in `src/lib/campaigns/revisions.ts`), then starts a full new run. The **Revisions** tab matches directions across revisions by their anchor findings (`src/lib/campaigns/compare.ts`) and shows anchors lost and gained, shortlist changes and package costs. The showcase ships with revision 2 (*Removed "Khruangbin"*) precomputed. Still to do: `edit_input`, `add_market`, `explain_choice`.
 10. **Creator workspace** → offers on exact versions → production and approvals.
 11. **Evaluate** (baseline mode + blind A/B) + ablation script.
-12. **Showcase precompute**, landing page with demo entry, `/about/qloo`.
+12. ✅ **Showcase precompute**, landing page with demo entry, `/about/qloo`. The showcase is researched by the real pipeline during the Vercel build (`pnpm db:showcase`, skipped once done) and owned by a memberless org, so it is read-only. `/showcase` signs visitors in as the demo brand and opens it. *Duplicate to my workspace* is still to do.
 13. **Market adaptation**, compare-3, results, learnings, overview.
 14. **Hardening**: degraded states, permissions tests, mobile and a11y passes, load test.
-15. **Deploy and submit**. *Deploy as soon as there's a GitHub repo, and keep it deployed from step 3 onward.*
+15. **Deploy and submit**. *2026-10-28: a full run verified in production over HTTP (sign-in → brief → "Which did you mean?" → 4 directions, 8 proposals, 3 packages). No Hobby function timeouts: directions ≈50 s, casting ≈2 min, proposals ≈70 s.* *Deploy as soon as there's a GitHub repo, and keep it deployed from step 3 onward.*
 
 ---
 

@@ -9,7 +9,8 @@ import { run } from "@/db/schema";
 import { getActor, requireAuthorized, UnauthenticatedError } from "@/lib/auth/actor";
 import { getAuth } from "@/lib/auth/server";
 import { BriefError, createCampaignFromForm } from "@/lib/campaigns/create";
-import { resolveAndResume, retryResearch, runCampaign } from "@/lib/campaigns/runs";
+import { RevisionError, type RevisionChange } from "@/lib/campaigns/revisions";
+import { refineCampaign, resolveAndResume, retryResearch, runCampaign } from "@/lib/campaigns/runs";
 import { DEMO_ACCOUNTS, type DemoRole } from "@/lib/demo/accounts";
 
 const str = (form: FormData, key: string) => String(form.get(key) ?? "").trim();
@@ -74,5 +75,23 @@ export async function cancelRun(runId: string) {
   const db = await getDb();
   await db.update(run).set({ cancelRequested: true, status: "cancelled" }).where(eq(run.id, runId));
   if (r.workflowRunId) await getRun(r.workflowRunId).cancel({ cancelReason: "Cancelled by user" }).catch(() => undefined);
+  redirect(`/brand/campaigns/${campaignId}`);
+}
+
+/** Refine buttons submit `change` as "remove_reference:<id>", "remove_input:<id>" or "set_budget" (with `budget`). */
+export async function refineAction(campaignId: string, _prev: FormState, form: FormData): Promise<FormState> {
+  const [type, id] = str(form, "change").split(":");
+  const change: RevisionChange | null =
+    type === "remove_reference" ? { type, referenceId: id } :
+    type === "remove_input" ? { type, inputId: id } :
+    type === "set_budget" ? { type, budgetCents: Math.round(Number(str(form, "budget").replace(/[^\d.]/g, "")) * 100) } :
+    null;
+  if (!change) return { error: "Choose what to change." };
+  try {
+    await refineCampaign(campaignId, change);
+  } catch (err) {
+    if (err instanceof RevisionError) return { error: err.message };
+    throw err;
+  }
   redirect(`/brand/campaigns/${campaignId}`);
 }

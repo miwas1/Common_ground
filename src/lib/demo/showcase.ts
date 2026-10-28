@@ -8,6 +8,7 @@ import { and, desc, eq } from "drizzle-orm";
 import type { Db } from "@/db";
 import { organization } from "@/db/auth-schema";
 import { briefInput, campaign, campaignRevision, orgProfile, resolvedReference, run } from "@/db/schema";
+import { deriveRevision } from "@/lib/campaigns/revisions";
 import type { Llm } from "@/lib/llm";
 import type { BriefForm } from "@/lib/pipeline/context";
 import { applyResolutionChoices } from "@/lib/pipeline/stages/resolve";
@@ -91,20 +92,20 @@ async function showcaseRevision(db: Db) {
 
 export type ShowcaseDeps = { qlooFor: (campaignId: string, runId: string) => QlooApi; llm: Llm; log?: (line: string) => void };
 
-/** Idempotent: does nothing once the showcase has a finished run; otherwise researches it from the start. */
-export async function seedShowcase(db: Db, deps: ShowcaseDeps): Promise<{ campaignId: string; status: "exists" | "created" }> {
+/** The refinement shown in the showcase's revision compare: the same brief without this reference. */
+export const SHOWCASE_REMOVED_REFERENCE = "Khruangbin";
+
+/** Run every stage of a new run for the revision, inline; choices at "Which did you mean?" come from SHOWCASE_CHOICES. */
+async function researchInline(db: Db, deps: ShowcaseDeps, campaignId: string, revisionId: string) {
   const log = deps.log ?? (() => undefined);
-  const { campaignId, revisionId } = await showcaseRevision(db);
   const [done] = await db.select({ id: run.id }).from(run).where(and(eq(run.revisionId, revisionId), eq(run.status, "done"))).limit(1);
-  if (done) return { campaignId, status: "exists" };
+  if (done) return false;
 
   // A previous attempt that died mid-run would block a new one (one active run per revision).
   // Its reference resolution belongs to the revision and is reused.
   await db.update(run).set({ status: "error" }).where(and(eq(run.revisionId, revisionId), eq(run.status, "running")));
   const [r] = await db.insert(run).values({ revisionId, status: "running" }).returning({ id: run.id });
-  await db.update(campaign).set({ status: "researching" }).where(eq(campaign.id, campaignId));
   const ctx = { db, runId: r.id, qloo: deps.qlooFor(campaignId, r.id), llm: deps.llm };
-
   try {
     for (const stage of STAGES) {
       const started = Date.now();
@@ -125,6 +126,34 @@ export async function seedShowcase(db: Db, deps: ShowcaseDeps): Promise<{ campai
     throw new Error(`Showcase research failed: ${message}`);
   }
   await setRunStatus(r.id, "done");
-  await db.update(campaign).set({ status: "reviewing_proposals" }).where(eq(campaign.id, campaignId));
-  return { campaignId, status: "created" };
+  return true;
+}
+
+/**
+ * Idempotent: researches revision 1 (the example brief), then revision 2 (the same brief with
+ * SHOWCASE_REMOVED_REFERENCE removed) for the revision compare. Each step is skipped once done.
+ * The campaign keeps revision 1 as its current revision.
+ */
+export async function seedShowcase(db: Db, deps: ShowcaseDeps): Promise<{ campaignId: string; status: "exists" | "created" }> {
+  const log = deps.log ?? (() => undefined);
+  const { campaignId, revisionId } = await showcaseRevision(db);
+  let created = await researchInline(db, deps, campaignId, revisionId);
+  await db.update(campaign).set({ status: "reviewing_proposals", currentRevisionId: revisionId }).where(eq(campaign.id, campaignId));
+
+  const [child] = await db.select({ id: campaignRevision.id }).from(campaignRevision).where(eq(campaignRevision.parentRevisionId, revisionId)).limit(1);
+  let childId = child?.id;
+  if (!childId) {
+    const [ref] = await db
+      .select({ id: resolvedReference.id })
+      .from(resolvedReference)
+      .where(and(eq(resolvedReference.revisionId, revisionId), eq(resolvedReference.status, "confirmed"), eq(resolvedReference.label, SHOWCASE_REMOVED_REFERENCE)));
+    if (!ref) {
+      log(`  revision 2 skipped: "${SHOWCASE_REMOVED_REFERENCE}" is not a confirmed reference`);
+      return { campaignId, status: created ? "created" : "exists" };
+    }
+    childId = (await deriveRevision(db, campaignId, { type: "remove_reference", referenceId: ref.id }, null)).revisionId;
+    log(`  revision 2: removed "${SHOWCASE_REMOVED_REFERENCE}"`);
+  }
+  created = (await researchInline(db, deps, campaignId, childId)) || created;
+  return { campaignId, status: created ? "created" : "exists" };
 }

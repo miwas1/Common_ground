@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { ClaimBadge, ClaimList } from "@/components/claims";
+import { RefinePanel } from "@/components/refine-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,8 +17,9 @@ const AGE = (b: string) => b.replaceAll("_", " ").replace("and", "&");
 async function Strategy({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   await pageAuthorize({ type: "campaign.read", campaignId: id });
-  const { run } = await getCampaignHeader(id);
-  if (!run) return null;
+  const { run, campaign, revision } = await getCampaignHeader(id);
+  if (!run || !revision) return null;
+  const refinable = !campaign.isShowcase && ["done", "error", "cancelled"].includes(run.status);
   const { inputs, comparison, directions } = await getStrategy(run.id);
 
   return (
@@ -62,6 +64,8 @@ async function Strategy({ params }: { params: Promise<{ id: string }> }) {
           </Card>
         )}
       </section>
+
+      {refinable && <RefinePanel campaignId={id} revisionId={revision.id} budgetCents={revision.budgetCents} currency={revision.currency} />}
 
       {directions.length === 0 ? (
         <p className="text-sm text-muted-foreground">Cultural directions appear here when the research reaches them.</p>

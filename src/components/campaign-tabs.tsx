@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-export function CampaignTabs({ campaignId, counts }: { campaignId: string; counts: { proposals: number } }) {
+export function CampaignTabs({ campaignId, counts }: { campaignId: string; counts: { proposals: number; revisions: number } }) {
   const pathname = usePathname();
   const base = `/brand/campaigns/${campaignId}`;
   const tabs = [
     { href: base, label: "Strategy" },
     { href: `${base}/proposals`, label: `Proposals${counts.proposals ? ` ${counts.proposals}` : ""}` },
     { href: `${base}/plan`, label: "Plan" },
+    ...(counts.revisions > 1 ? [{ href: `${base}/revisions`, label: `Revisions ${counts.revisions}` }] : []),
   ];
   const active = (href: string) => (href === base ? pathname === base : pathname.startsWith(href));
   return (

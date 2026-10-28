@@ -66,7 +66,7 @@ Return the structured brief. Keep references to the ones the brief supports (at 
 
   const parsed = await objectWithValidation(
     ctx.llm,
-    { name: "parse brief", system: SYSTEM, prompt, schema: ParsedBrief, effort: "low" },
+    { name: "parse brief", system: SYSTEM, prompt, schema: ParsedBrief, effort: "low", tier: "fast" },
     (v) => {
       const issues: Issue[] = [];
       if (v.references.length > 10) issues.push({ path: "references", message: "at most 10 references" });
