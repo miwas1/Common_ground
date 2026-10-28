@@ -53,7 +53,7 @@ function signalParams(s: TasteSignals): QlooParams {
 }
 
 const hasSignal = (s: TasteSignals) =>
-  Boolean(s.entities?.length || s.tags?.length || s.audiences?.length || s.location);
+  Boolean(s.entities?.length || s.tags?.length || s.audiences?.length || s.location || s.ageBands?.length || s.gender);
 
 function requireSignal(s: TasteSignals, op: string) {
   if (!hasSignal(s)) throw new Error(`${op}: at least one entity, tag, audience or location signal is required`);

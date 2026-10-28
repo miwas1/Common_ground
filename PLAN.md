@@ -280,9 +280,9 @@ Accessibility baseline: keyboard navigation, visible focus, AA contrast, reduced
 3. ✅ **Foundation spikes**: Workflow SDK and Better Auth both proven on PGlite (§13).
 4. ✅ **Schema v2** (§5) linked to identity tables (10 foreign keys, `org_profile`), **`authorize()`** with an 11-case test matrix, and **demo users and orgs** seeded through Better Auth (`pnpm db:seed`).
 5. ✅ **Seed**: 30 fictional creators (US, UK, DE) with 71 portfolio pieces, 41 quotes, and **120/120 references and 79/79 themes confirmed** through Qloo (`pnpm db:seed`). Imagery is still to come with Blob storage.
-6. **Claims engine**: finding templates, binding validator, interpretation rules, with tests first.
-7. **Workflow + stages 1–6** → Strategy tab. *This is the first end-to-end demo.*
-8. **Stages 7–9** → proposals, proposal page, evidence drawer, packages.
+6. ✅ **Claims engine** (`src/lib/claims`): findings rendered by code from stored evidence; interpretation/claim content rules; bindings to evidence, findings, portfolio items and quotes; bounded re-ask loop (`objectWithValidation`).
+7. ✅ **Workflow + stages 1–6** (`src/workflows/research.ts`, `src/lib/pipeline/stages`) → Strategy tab, with live run progress, cancellation and the "Which did you mean?" pause.
+8. ✅ **Stages 7–9** → casting, proposals, proposal page with evidence trail, budget packages (indicative FX for mixed-currency quotes).
 9. **Revisions and refinement** + revision compare.
 10. **Creator workspace** → offers on exact versions → production and approvals.
 11. **Evaluate** (baseline mode + blind A/B) + ablation script.

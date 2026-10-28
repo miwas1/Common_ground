@@ -28,13 +28,14 @@ export class DbCache implements QlooCache {
   }
 }
 
-/** Persist a provenance record, optionally attributed to a campaign. */
-export function recordCall(source: DbSource, campaignId?: string) {
+/** Persist a provenance record, optionally attributed to a campaign and pipeline run. */
+export function recordCall(source: DbSource, campaignId?: string, runId?: string) {
   return async (call: QlooCallRecord) => {
     const db = await source;
     await db.insert(qlooCall).values({
       id: call.id,
       campaignId: campaignId ?? null,
+      runId: runId ?? null,
       endpoint: call.endpoint,
       params: call.params,
       status: call.status,

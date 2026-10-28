@@ -22,6 +22,14 @@ A good creator match doesn't automatically produce a good campaign. Common Groun
 
 Qloo results describe **aggregate affinities**, not individuals. No personal data is sent to Qloo. A creator's own tastes are never presented as evidence about their followers.
 
+## What works today
+
+- **Brief → research → proposals, end to end**, on live Qloo and Claude. A durable workflow runs nine stages: parse the brief, resolve references to Qloo (pausing to ask *"Which did you mean?"* when a name is ambiguous), audience read, cross-domain exploration, direction synthesis, three checks per direction, casting, proposal writing and budget packages.
+- **Claims you can trace.** Every factual statement about Qloo data is written by code from a stored result. Each one names its rank, its query and its affinity, and the exact request is one click away. The model writes only interpretations, which are labelled as such, must cite findings, and are rejected if they contain numbers, superlatives, purchase or performance predictions, or claims about individuals.
+- **Three separate checks on every direction:** coherence, input sensitivity (leave-one-out, rank-biased overlap plus concept retention, naming any unconfirmed assumption it depends on) and campaign relevance (scored against a held-out audience-only profile, reported as "not measured" when Qloo's scores don't differentiate).
+- **Casting without a "match %".** Hard constraints come first, then portfolio capability (each judgment cites portfolio pieces), then cultural fit by rank *within each Qloo query*, using each creator's best reference. A missing result means "not measured", and city is never treated as cultural fit.
+- **Real identity:** demo brand and creator accounts, organizations, and permission checks on every action.
+
 ## Run locally
 
 Requires Node.js ≥ 22 and pnpm.

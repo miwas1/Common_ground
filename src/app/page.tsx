@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { signInAsDemo } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 
 const steps = [
@@ -27,11 +29,14 @@ export default function Home() {
         partnership into a campaign worth testing.
       </p>
       <div className="mt-8 flex flex-wrap gap-3">
-        <Button size="lg" disabled>
-          Open showcase campaign
-        </Button>
-        <Button size="lg" variant="outline" disabled>
-          Run it on your brand
+        <form action={signInAsDemo.bind(null, "brand")}>
+          <Button size="lg" type="submit">Enter as brand</Button>
+        </form>
+        <form action={signInAsDemo.bind(null, "creator")}>
+          <Button size="lg" type="submit" variant="outline">Enter as creator</Button>
+        </form>
+        <Button size="lg" variant="ghost" asChild>
+          <Link href="/sign-in">Sign in</Link>
         </Button>
       </div>
 

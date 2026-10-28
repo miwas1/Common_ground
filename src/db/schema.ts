@@ -293,6 +293,8 @@ export const direction = pgTable(
     audienceContext: text("audience_context").notNull(),
     productRole: text("product_role").notNull(),
     artDirection: jsonb("art_direction").notNull().default({}),
+    /** What the direction takes for granted; shown to the user and challengeable. */
+    assumptions: jsonb("assumptions").notNull().default([]),
     colorIndex: integer("color_index").notNull().default(1),
     status: directionStatus("status").notNull().default("active"),
   },
@@ -396,6 +398,8 @@ export const quote = pgTable("quote", {
 export const creatorFit = pgTable(
   "creator_fit",
   {
+    /** Stable id so claims can be owned by a fit (the primary key is the triple). */
+    id: uuid("id").notNull().unique().defaultRandom(),
     runId: uuid("run_id")
       .notNull()
       .references(() => run.id, { onDelete: "cascade" }),
