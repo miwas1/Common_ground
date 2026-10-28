@@ -1,8 +1,10 @@
 import type { NextConfig } from "next";
+import { withWorkflow } from "workflow/next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
   cacheComponents: true,
+  // PGlite ships WASM and data files; load it with Node require instead of bundling.
+  serverExternalPackages: ["@electric-sql/pglite"],
   partialPrefetching: true,
   turbopack: {
     rules: {
@@ -14,4 +16,5 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// Enables "use workflow" / "use step" (durable research runs, PLAN.md §3.2).
+export default withWorkflow(nextConfig);

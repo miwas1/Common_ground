@@ -39,3 +39,16 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# keep the env template committable; real env files stay ignored above
+!.env.example
+!.env.development
+
+# Qloo responses must never be committed (API terms)
+/qloo-cache/
+/scripts/out/
+
+# local embedded Postgres (PGlite) data
+/.pglite/
+
+/.swc

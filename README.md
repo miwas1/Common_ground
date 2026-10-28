@@ -1,36 +1,62 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Common Ground
 
-## Getting Started
+**An AI creative strategist and casting agent for brands and creators.**
 
-First, run the development server:
+Common Ground discovers the cultural worlds a brand's customers care about, finds creators who can work authentically in those worlds, and turns each partnership into a complete campaign proposal worth testing.
+
+Built for the [Qloo Agentic Hackathon](https://qloo.devpost.com/). 🚧 Work in progress. See [PLAN.md](PLAN.md) for the full design.
+
+## Why Qloo is load-bearing
+
+A good creator match doesn't automatically produce a good campaign. Common Ground uses Qloo's taste graph to find the **shared cultural context** that gives a collaboration a reason to exist. It then keeps every claim traceable to the Qloo finding behind it.
+
+| Qloo capability | What Common Ground uses it for |
+|---|---|
+| `/search`, `/v2/tags`, `/v2/audiences` | Resolve brief references (brands, interests, segments), with explicit disambiguation |
+| `/v2/insights` · `urn:tag` taste analysis | Lifestyle, aesthetic and emotional concepts that become **cultural directions** |
+| `/v2/insights` · cross-domain entities + explainability | Each direction's world: music, shows, podcasts, brands and places, plus which inputs drove them |
+| `/v2/insights` · `filter.results.entities/tags` | Score a creator's public references against each direction |
+| `/v2/insights` · `urn:demographics` | Audience reality check: the stated audience vs aggregate affinity |
+| `/v2/insights` · `urn:heatmap` | Where a direction is strongest within a market |
+| `/v2/analysis/compare`, `/v2/trending` | How directions differ, and momentum (when the data isn't flat) |
+
+Qloo results describe **aggregate affinities**, not individuals. No personal data is sent to Qloo. A creator's own tastes are never presented as evidence about their followers.
+
+## Run locally
+
+Requires Node.js ≥ 22 and pnpm.
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
+cp .env.example .env.local   # add QLOO_API_KEY and ANTHROPIC_API_KEY
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Locally you don't need a database server. With `DATABASE_URL` unset, the app runs embedded [PGlite](https://pglite.dev) (Postgres compiled to WASM) in `./.pglite` and applies migrations automatically. In production, set `DATABASE_URL` to a Neon connection string and run `pnpm db:migrate`. Both are Postgres, so the schema and queries are identical. `GET /api/health` reports which driver is active.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Script | Purpose |
+|---|---|
+| `pnpm test` | Unit tests (synthetic fixtures; no network) |
+| `pnpm test:live` | Contract tests against the live Qloo hackathon API |
+| `pnpm typecheck` · `pnpm lint` · `pnpm build` | Static checks and production build |
+| `pnpm db:generate` · `pnpm db:migrate` | Drizzle migrations (PGlite locally, Neon when `DATABASE_URL` is set) |
+| `pnpm db:studio` · `pnpm db:reset` | Browse the database · delete the local PGlite data |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Project layout
 
-## Learn More
+```
+src/lib/qloo/     Qloo client: transport, trimming, typed API, private cache, provenance
+src/db/           Drizzle schema and connection
+src/app/          Next.js App Router UI
+drizzle/          SQL migrations
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Data handling
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- The Qloo key stays server-side. It's never sent to the browser or committed.
+- Qloo responses are cached privately in Postgres and are never stored in this repository.
+- Every Qloo call is logged with its parameters and status, which feeds the in-product evidence trail.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## License
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+[MIT](LICENSE)
