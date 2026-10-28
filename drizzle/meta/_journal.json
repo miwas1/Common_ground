@@ -15,6 +15,13 @@
       "when": 1793176034198,
       "tag": "0001_faulty_surge",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793176924470,
+      "tag": "0002_lovely_jimmy_woo",
+      "breakpoints": true
     }
   ]
 }

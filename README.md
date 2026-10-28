@@ -41,6 +41,8 @@ Locally you don't need a database server. With `DATABASE_URL` unset, the app run
 | `pnpm typecheck` · `pnpm lint` · `pnpm build` | Static checks and production build |
 | `pnpm db:generate` · `pnpm db:migrate` | Drizzle migrations (PGlite locally, Neon when `DATABASE_URL` is set) |
 | `pnpm db:studio` · `pnpm db:reset` | Browse the database · delete the local PGlite data |
+| `pnpm db:seed` | Create the demo brand and creator accounts (idempotent; needs `DEMO_PASSWORD`; stop `pnpm dev` first when using PGlite) |
+| `pnpm auth:generate` | Regenerate Better Auth tables after changing auth plugins |
 
 ## Project layout
 

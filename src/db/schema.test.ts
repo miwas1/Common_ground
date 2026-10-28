@@ -2,7 +2,8 @@
 // so a bug in application code cannot store an unsupported finding or a second active run.
 import { beforeAll, describe, expect, it } from "vitest";
 import { openPglite, type Db } from "@/db";
-import { campaign, campaignRevision, claim, claimBinding, evidence, run } from "@/db/schema";
+import { campaign, claim, claimBinding, evidence, run } from "@/db/schema";
+import { createCampaign, createOrg, createUser } from "@/test/fixtures";
 
 describe("schema constraints", { timeout: 30_000 }, () => {
   let db: Db;
@@ -11,22 +12,15 @@ describe("schema constraints", { timeout: 30_000 }, () => {
 
   beforeAll(async () => {
     db = await openPglite("memory://");
-    const [c] = await db.insert(campaign).values({ name: "Constraints", organizationId: "org_test" }).returning();
-    const [r] = await db
-      .insert(campaignRevision)
-      .values({
-        campaignId: c.id,
-        number: 1,
-        brief: {},
-        campaignType: "ugc_production",
-        markets: ["US"],
-        languages: ["en"],
-        createdBy: "user_test",
-      })
-      .returning();
-    revisionId = r.id;
+    const userId = await createUser(db);
+    const organizationId = await createOrg(db, { kind: "brand", members: [{ userId }] });
+    ({ revisionId } = await createCampaign(db, { organizationId, userId }));
     const [rn] = await db.insert(run).values({ revisionId, status: "running" }).returning();
     runId = rn.id;
+  });
+
+  it("rejects a campaign owned by an organization that does not exist", async () => {
+    await expect(db.insert(campaign).values({ name: "Orphan", organizationId: "no-such-org" })).rejects.toThrow();
   });
 
   it("allows only one active run per revision and mode", async () => {

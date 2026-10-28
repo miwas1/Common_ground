@@ -276,7 +276,7 @@ Accessibility baseline: keyboard navigation, visible focus, AA contrast, reduced
 1. ✅ **Scaffold**: Next.js 16, tokens, shadcn, Drizzle with PGlite/Neon, MIT license, README, project rules.
 2. ✅ **Qloo client** with cache, provenance, unit tests and live contract tests.
 3. ✅ **Foundation spikes**: Workflow SDK and Better Auth both proven on PGlite (§13).
-4. **Schema v2** (§5) + **authorization helper** + demo users and orgs.
+4. ✅ **Schema v2** (§5) linked to identity tables (10 foreign keys, `org_profile`), **`authorize()`** with an 11-case test matrix, and **demo users and orgs** seeded through Better Auth (`pnpm db:seed`).
 5. **Seed**: roster, portfolio, quotes, and resolved references and themes.
 6. **Claims engine**: finding templates, binding validator, interpretation rules, with tests first.
 7. **Workflow + stages 1–6** → Strategy tab. *This is the first end-to-end demo.*
@@ -376,4 +376,4 @@ Integration notes:
 - The adapter needs a ready database and PGlite boots asynchronously, so the app uses a lazily created, cached `getAuth()` (`src/lib/auth/server.ts`). The CLI loads `auth.cli.ts`, which shares `authOptions()`.
 - Identity tables are generated into `src/db/auth-schema.ts` with `pnpm auth:generate`, which also runs `drizzle-kit generate`. Migration `0001` adds them.
 - `BETTER_AUTH_SECRET` is in `.env.local` (generated locally). Production needs its own secret and `BETTER_AUTH_URL` set to the deployed origin.
-- Still to do in §8.4: foreign keys from app tables (`campaign.organization_id`, `creator.organization_id`, user references) to the identity tables, an `org_profile(kind)` table, and the `authorize()` helper with tests.
+- §8.4 follow-up: done. App tables reference `organization` and `user`; `org_profile(kind)` marks brand vs creator orgs; `authorize()` lives in `src/lib/auth/authorize.ts` (`requireAuthorized()` in server code).

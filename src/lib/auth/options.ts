@@ -9,7 +9,9 @@ import { multiSession, organization } from "better-auth/plugins";
 /** Invitation links are shown in the UI to copy (no email delivery in scope). */
 export const invitationPath = (invitationId: string) => `/invitations/${invitationId}`;
 
-export function authOptions(): BetterAuthOptions {
+// `satisfies` (not a return annotation) keeps the plugin types, so `auth.api` exposes plugin
+// endpoints such as createOrganization and sessions carry activeOrganizationId.
+export function authOptions() {
   return {
     appName: "Common Ground",
     emailAndPassword: { enabled: true },
@@ -22,5 +24,5 @@ export function authOptions(): BetterAuthOptions {
       // must stay last: applies Set-Cookie from server actions
       nextCookies(),
     ],
-  };
+  } satisfies BetterAuthOptions;
 }

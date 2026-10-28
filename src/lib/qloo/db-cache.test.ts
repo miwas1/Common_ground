@@ -2,18 +2,21 @@ import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { openPglite, type Db } from "@/db";
 import { campaign, qlooCall } from "@/db/schema";
+import { createOrg } from "@/test/fixtures";
 import { QlooClient } from "./client";
 import { DbCache, recordCall } from "./db-cache";
 
 describe("Qloo cache and provenance on PGlite", { timeout: 30_000 }, () => {
   let db: Db;
+  let organizationId: string;
 
   beforeAll(async () => {
     db = await openPglite("memory://");
+    organizationId = await createOrg(db, { kind: "brand" });
   });
 
   it("applies migrations", async () => {
-    const [row] = await db.insert(campaign).values({ name: "Test", organizationId: "org_test" }).returning();
+    const [row] = await db.insert(campaign).values({ name: "Test", organizationId }).returning();
     expect(row.status).toBe("brief_draft");
   });
 
@@ -27,7 +30,7 @@ describe("Qloo cache and provenance on PGlite", { timeout: 30_000 }, () => {
   });
 
   it("serves repeat calls from the database and logs every call against the campaign", async () => {
-    const [c] = await db.insert(campaign).values({ name: "Provenance", organizationId: "org_test" }).returning();
+    const [c] = await db.insert(campaign).values({ name: "Provenance", organizationId }).returning();
     const fetchImpl = vi.fn(async () => Response.json({ results: [1, 2] }));
     const client = new QlooClient({
       apiKey: "k".repeat(12),

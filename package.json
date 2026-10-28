@@ -14,7 +14,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "db:reset": "rm -rf .pglite",
-    "auth:generate": "auth generate --config auth.cli.ts --adapter drizzle --dialect postgresql --output src/db/auth-schema.ts -y && drizzle-kit generate"
+    "auth:generate": "auth generate --config auth.cli.ts --adapter drizzle --dialect postgresql --output src/db/auth-schema.ts -y && drizzle-kit generate",
+    "db:seed": "tsx scripts/seed-demo.ts"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "1.7.14",
