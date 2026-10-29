@@ -4,13 +4,14 @@
 import { createHook } from "workflow";
 import { completeRun, executeStage, failRun } from "@/lib/pipeline/execute";
 import { markStage, setRunStatus } from "@/lib/runs/stages";
-import { stageName } from "@/lib/pipeline/stages";
+import { BASELINE_STAGES, stageName } from "@/lib/pipeline/stages";
 
 export const resolveHookToken = (runId: string) => `research:${runId}:resolve`;
 
 export async function researchRun(runId: string) {
   "use workflow";
   try {
+    await stage(runId, 0);
     await stage(runId, 1);
     const resolved = (await stage(runId, 2)) as { needsInput: number };
     if (resolved.needsInput > 0) {
@@ -19,7 +20,20 @@ export async function researchRun(runId: string) {
       await hook;
       await resumeAfterChoices(runId);
     }
-    for (const position of [3, 4, 5, 6, 7, 8, 9]) await stage(runId, position);
+    for (const position of [3, 4, 5, 6, 11, 10, 7, 8, 9]) await stage(runId, position);
+    await finish(runId);
+    return { runId };
+  } catch (err) {
+    await fail(runId, err instanceof Error ? err.message : String(err));
+    throw err;
+  }
+}
+
+/** The Evaluate comparison (PLAN.md §4.6): the same pipeline on the same revision, without the Qloo stages. */
+export async function baselineRun(runId: string) {
+  "use workflow";
+  try {
+    for (const position of BASELINE_STAGES) await stage(runId, position);
     await finish(runId);
     return { runId };
   } catch (err) {

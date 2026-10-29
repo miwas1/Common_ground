@@ -6,6 +6,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import type { z } from "zod";
 import { openPglite, type Db } from "@/db";
 import {
+  brandFact,
   briefInput,
   budgetPackage,
   campaign,
@@ -15,6 +16,7 @@ import {
   creatorFit,
   direction,
   directionCheck,
+  discoveredCreator,
   proposal,
   proposalVersion,
   resolvedReference,
@@ -28,7 +30,7 @@ import type { Llm, ObjectRequest } from "@/lib/llm";
 import type { QlooApi } from "@/lib/qloo/api";
 import type { BriefForm, StageCtx } from "./context";
 import { applyResolutionChoices } from "./stages/resolve";
-import { STAGES } from "./stages";
+import { BASELINE_STAGES, STAGES } from "./stages";
 
 const ok = <T>(data: T) => ({ status: "ok" as const, data, call: { id: undefined } as never });
 const TASTE_SEED = "E:Khruangbin";
@@ -78,6 +80,25 @@ function fakeLlm() {
     async object<S extends z.ZodType>(req: ObjectRequest<S>): Promise<z.infer<S>> {
       calls.push(req.name);
       const p = req.prompt;
+      if (req.name === "understand brief") {
+        return {
+          summary: "Juniper Coffee is launching a cold brew concentrate for making iced coffee at home.",
+          terms: [{ term: "cold brew", meaning: "coffee steeped cold" }],
+          peers: ["Stumptown Coffee Roasters"],
+          cautions: [],
+          talent: ["chef", "food_stylist"],
+        } as z.infer<S>;
+      }
+      if (req.name === "fit with what the brand knows") {
+        const dirs = keys(p, /^(D\d+) "/gm);
+        const ks = keys(p, /^(K\d+) \(/gm);
+        return { directions: dirs.map((d, i) => ({ direction: d, verdict: i === 0 ? "tension" : "not_covered", note: "Customer research leans towards speed over craft.", statements: i === 0 ? ks.slice(0, 1) : [] })) } as z.infer<S>;
+      }
+      if (req.name === "pick matches") {
+        // "Blue" stays a question (two equally plausible brands); "Mystery Band" never reaches here.
+        const refs = keys(p, /^(R\d+) "/gm);
+        return { picks: refs.map((ref) => ({ ref, choice: "ask" })) } as z.infer<S>;
+      }
       if (req.name === "parse brief") {
         return {
           productCategory: "coffee concentrate",
@@ -116,6 +137,24 @@ function fakeLlm() {
           })),
         } as z.infer<S>;
       }
+      if (req.name === "synthesize directions (baseline)") {
+        const b = keys(p, /^(B\d+) /gm);
+        return {
+          directions: [0, 1, 2].map((i) => ({
+            title: `Baseline ${["A", "B", "C"][i]}`,
+            audienceContext: "People who could enjoy cooking at home.",
+            productRole: "A quick step that could fit an existing ritual.",
+            anchors: [b[i % b.length]],
+            interpretations: [
+              { text: "Home cooking could carry the product.", evidence: [b[0]] },
+              { text: "Music at home could set the mood.", evidence: [b[b.length - 1]] },
+            ],
+            sceneIdeas: ["A weeknight dinner"],
+            artDirection: { palette: "warm", settings: ["kitchen"], moodWords: ["easy"] },
+            assumptions: ["The audience cooks at home"],
+          })),
+        } as z.infer<S>;
+      }
       if (req.name === "judge relevance") {
         const blocks = p.split(/\n(?=D\d+ ")/).filter((b) => /^D\d+ "/.test(b.trim()));
         return {
@@ -137,18 +176,18 @@ function fakeLlm() {
         } as z.infer<S>;
       }
       if (req.name.startsWith("proposals for")) {
-        const fKeys = keys(p, /^(F\d+):/gm);
+        const fKeys = keys(p, /^([FB]\d+):/gm);
         const blocks = p.split(/\n(?=C\d+ )/).filter((b) => /^C\d+ /.test(b.trim()));
         return {
           proposals: blocks.map((b) => ({
             creator: b.trim().match(/^(C\d+)/)![1],
-            quote: keys(b, /(Q\d+):/g)[0],
+            quote: keys(b, /(Q\d+):/g)[0] ?? "none",
             concept: { title: "Dessert that waits", logline: "A host serves an iced dessert drink.", hook: "6am, before anyone wakes.", beats: ["Prep", "Pour", "Serve", "Toast"], productIntegration: "The concentrate is the base.", setting: "Small kitchen" },
             deliverables: [{ format: "vertical video", count: 3, notes: "With hooks" }],
             hypothesis: "Tests whether hosting scenes beat morning rituals for attention.",
             openQuestions: ["Which hook the creator prefers"],
             whyThisCollaboration: [{ text: "The direction's concepts could suit this creator's world.", evidence: fKeys.slice(0, 1) }],
-            portfolioEvidence: [{ text: "Their hosting work shows natural ingredient demos.", portfolio: keys(b, /(P\d+):/g).slice(0, 1) }],
+            portfolioEvidence: keys(b, /(P\d+):/g).length ? [{ text: "Their hosting work shows natural ingredient demos.", portfolio: keys(b, /(P\d+):/g).slice(0, 1) }] : [],
           })),
         } as z.infer<S>;
       }
@@ -198,10 +237,14 @@ describe("research pipeline (offline)", { timeout: 120_000 }, () => {
     ctx = { db, runId: r.id, qloo: fakeQloo(), llm: fake.llm };
   });
 
-  it("parses the brief and resolves references, pausing on ambiguity", async () => {
+  it("understands the brief, then parses it and resolves references, pausing on ambiguity", async () => {
+    const understood = (await runStage_(0)) as { summary: string; searched: boolean };
+    expect(understood).toMatchObject({ searched: false });
+    expect(fake.calls).toContain("understand brief");
     await runStage_(1);
     const res = (await runStage_(2)) as { needsInput: number; confirmed: number; notFound: number };
     expect(res).toMatchObject({ needsInput: 1, notFound: 1 });
+    expect(fake.calls).toContain("pick matches");
     const refs = await db.select().from(resolvedReference).where(eq(resolvedReference.revisionId, revisionId));
     const ambiguous = refs.find((r) => r.status === "needs_input")!;
     expect(ambiguous.label).toBe("Blue");
@@ -250,6 +293,31 @@ describe("research pipeline (offline)", { timeout: 120_000 }, () => {
     }
   });
 
+  it("checks directions against the brand's approved profile, and skips the check without one", async () => {
+    expect(await runStage_(11)).toEqual({ checked: false, directions: [] });
+    const [r] = await db.select({ org: campaign.organizationId }).from(campaign).limit(1);
+    await db.insert(brandFact).values([
+      { brandOrganizationId: r.org, kind: "research", text: "Customers value speed over craft.", status: "approved", createdBy: "user" },
+      { brandOrganizationId: r.org, kind: "belief", text: "Not yet reviewed.", status: "suggested", createdBy: "model" },
+    ]);
+    const out = (await runStage_(11)) as { checked: boolean; directions: { verdict: string; factIds: string[] }[] };
+    expect(out.checked).toBe(true);
+    expect(out.directions).toHaveLength(3);
+    expect(out.directions[0]).toMatchObject({ verdict: "tension" });
+    expect(out.directions[0].factIds).toHaveLength(1);
+    // Only approved statements reach the check.
+    expect(fake.calls.filter((c) => c === "fit with what the brand knows")).toHaveLength(1);
+  });
+
+  it("finds real creators for each direction, ranked within that direction, with their audiences", async () => {
+    const out = (await runStage_(10)) as { directions: number; creators: number };
+    expect(out).toMatchObject({ directions: 3, creators: 24 });
+    const found = await db.select().from(discoveredCreator).where(eq(discoveredCreator.runId, ctx.runId));
+    expect(new Set(found.map((f) => f.directionId)).size).toBe(3);
+    expect(found.every((f) => f.rank >= 1 && f.rank <= f.resultCount && f.evidenceId)).toBe(true);
+    expect(found.every((f) => f.audience !== null)).toBe(true);
+  });
+
   it("casts with separate dimensions and shortlists deterministically", async () => {
     const out = (await runStage_(7)) as { passingConstraints: number; rosterSize: number };
     expect(out.rosterSize).toBe(30);
@@ -280,5 +348,26 @@ describe("research pipeline (offline)", { timeout: 120_000 }, () => {
     expect(packages.every((p) => p.costCents <= 1_200_000)).toBe(true);
     const rows = await db.select().from(proposal).where(eq(proposal.runId, ctx.runId));
     expect(rows.every((r) => r.currentVersionId)).toBe(true);
+  });
+
+  it("runs a baseline on the same revision without calling Qloo", async () => {
+    const [b] = await db.insert(run).values({ revisionId, mode: "baseline", status: "running" }).returning();
+    const noQloo = new Proxy({}, { get: () => () => { throw new Error("a baseline run must not call Qloo"); } }) as QlooApi;
+    const qlooCtx = ctx;
+    ctx = { db, runId: b.id, qloo: noQloo, llm: fake.llm, mode: "baseline" };
+    try {
+      for (const position of BASELINE_STAGES) await runStage_(position);
+    } finally {
+      ctx = qlooCtx;
+    }
+    const claims = await db.select().from(claim).where(eq(claim.runId, b.id));
+    expect(claims.some((c) => c.kind === "finding")).toBe(false);
+    const interpretations = claims.filter((c) => c.kind === "interpretation");
+    expect(interpretations.length).toBeGreaterThan(0);
+    expect(interpretations.every((c) => c.basis?.length && c.basis.every((t) => /^(Objective|Team notes|Audience input)/.test(t)))).toBe(true);
+    const fits = await db.select().from(creatorFit).where(eq(creatorFit.runId, b.id));
+    expect(fits.every((f) => Object.keys(f.culturalBands as object).length === 0)).toBe(true);
+    expect((await db.select().from(proposal).where(eq(proposal.runId, b.id))).length).toBeGreaterThanOrEqual(3);
+    expect((await db.select().from(budgetPackage).where(eq(budgetPackage.runId, b.id))).length).toBeGreaterThan(0);
   });
 });

@@ -40,6 +40,9 @@ Past winners (GeoTaste, Alloy, Resonance AI) were decision tools for a specific 
 | **Affinity scores are normalized per query** (Qloo docs: *interpreting-affinity-scores*). | **Scores from different requests are never averaged or compared.** Comparisons happen within one query, by rank (§4.3). |
 | Responses are heavy (10–250 KB) and calls take 1–5 seconds. | The client trims responses, caches them privately in Postgres and runs calls in parallel. *(Built.)* |
 | **Rate limits (from response headers): 10 requests/second and 50,000/month per key.** A burst of 16 parallel calls returned six 429s. | The client paces all requests process-wide at 8/s and waits for `x-second-ratelimit-reset` on a 429, separately from transient retries. Bursts of 32 now succeed. The monthly cap makes the private cache mandatory: a fresh roster seed costs about 106 live calls, and a reseed costs none. *(Built.)* |
+| ✅ **2026-10-29: Qloo knows real creators.** `filter.type=urn:entity:person` returns public people whose aggregate audience shares a profile, with Instagram handles in `external.instagram_username` and occupations as `urn:tag:occupation:person:*`. Anchoring on the brief's own brands is what keeps results in the category: coffee → Claire Saffitz, Carla Lalli Music, Rick Martínez, James Hoffmann; running shoes → Des Linden, Scott Jurek, Courtney Dauwalter, Lucy Charles. Creator occupations alone (YouTuber, TikToker…) sent running campaigns to explorers and self-help authors; no filter sent comedy-led coffee directions to comedians. People have no location filter. | **Stage 10 "Finding real creators"** (method 5): brief brands + direction entities and tags; `filter.tags` = creator occupations ∪ the category's talent occupations from stage 0 (`operator.filter.tags=union`), falling back to unfiltered when thin; politicians excluded, deceased skipped; directions don't repeat people. Plus audience demographics. |
+| ✅ `/entities?external.instagram.ids=<handle>` resolves a public handle to a person (`mkbhd` → Marques Brownlee). A batch doesn't say which handle matched which entity, and a name can also return an author entity. | Roster matching looks up **one handle per call** and keeps only `urn:entity:person`. |
+| ✅ `urn:demographics` works on people (Alison Roman: ages 35–44, female +0.63), batched. `filter.results.entities` ranks a supplied list of people against a profile (Blue Bottle: Yossy Arefi 0.965 … Marques Brownlee 0.745). | A creator's **audience lean** (with source and date) and an **audience band** in casting, by rank within the direction's query. |
 | Entity search often returns several exact-name matches (*The Office* US and UK, *Queer Eye*), and some canonical names differ from everyday ones (*The Great British Baking Show*, *Brompton Bicycle*). | `src/lib/qloo/resolve.ts` confirms only a single exact match of the right type, or a clearly dominant one (popularity ≥ 0.9 and 0.05 ahead). Everything else becomes `needs_input` with candidates. Themes need an exact tag name, preferring lifestyle, then hobby, then aesthetic. *(Built.)* |
 
 ---
@@ -68,6 +71,12 @@ Every item is **built for real, end to end**. The tiers set what we build first 
 
 ### P2: closing the loop
 15. **Results** by direction and hypothesis, **Learnings**, and the **Overview** dashboard.
+
+### Added 2026-10-29 (product review 2, §14)
+- **P0 · Real creators and the brand's own roster.** Stage 10 finds real creators per direction (§1). A **Creators** page holds the brand's private roster: CSV import, manual entry, portfolio links, rate (who supplied it, when), availability (when checked), notes, preferred, excluded with a reason; each creator matched to Qloo by Instagram handle (or a single exact name, flagged) with their audience lean. Casting uses the brand's roster (demo brands also keep the demo roster), ranks Qloo-known creators by audience band, and keeps creators with no quote as **"Quote required"** instead of excluding them.
+- **P1 · Precise control.** Pin / exclude with a reason, swap the creator on one proposal, edit a proposal as a new version (never overwritten), "same idea, simpler production", side-by-side compare, and a budget change that recalculates only the plan.
+- **P1 · Brand profile.** Upload research, approve extracted statements with their quoted passages, prefill briefs from it, and a "Does it fit what you know?" check per direction.
+- **P2 · Commission tracker** (brand-side only: stages Shortlisted → Published, owner, dates, agreed scope, usage-rights expiry) and the **heatmap**.
 
 ### Out of scope for the submission
 Billing, real social-platform integrations or follower data, email delivery (invitations show a copyable link), and notifications.
@@ -107,7 +116,7 @@ Durable runs (Workflow SDK: "use workflow" per run, "use step" per stage)
 | Qloo | `src/lib/qloo`: transport, trimming, typed API, DB cache, provenance | ✅ built, 6 live contract tests |
 | Durable runs | **Workflow SDK** (`workflow@5.2.3`, `withWorkflow` in `next.config.ts`, `src/instrumentation.ts`). Local backend in dev, Vercel-managed in production. | ✅ spike passed (§13) |
 | Auth | **Better Auth 1.7.14** + `@better-auth/drizzle-adapter` + `organization` + `multi-session` + `nextCookies` | ✅ spike passed (§13) |
-| LLM | **Claude Sonnet 5.5** for every judgment and writing step, **Claude Haiku 5.5** for parsing the brief. No other model is allowed (`ALLOWED_MODELS` in `src/lib/llm`), and there is no refusal fallback to another model. System and stage prompts are cached, so validation retries and per-direction calls read from the cache. | ✅ |
+| LLM | **Claude Haiku 5.5** for every step (`MODEL` in `src/lib/llm`), with effort set per step: low for reading the brief, medium for matching names and checks, high for directions and proposals. "Understanding your brief" uses Anthropic's web search tool for background only; nothing it finds is cited as evidence. There is no refusal fallback to another model. System and stage prompts are cached, so validation retries and per-direction calls read from the cache. | ✅ |
 | Map | **MapLibre GL + deck.gl HeatmapLayer** | — |
 | Files | **Vercel Blob** (private access, checked against org membership) | — |
 | Host | **Vercel** | Waiting on repo and accounts |
@@ -288,6 +297,10 @@ Accessibility baseline: keyboard navigation, visible focus, AA contrast, reduced
 12. ✅ **Showcase precompute**, landing page with demo entry, `/about/qloo`. The showcase is researched by the real pipeline during the Vercel build (`pnpm db:showcase`, skipped once done) and owned by a memberless org, so it is read-only. `/showcase` signs visitors in as the demo brand and opens it. *Duplicate to my workspace* is still to do.
 13. **Market adaptation**, compare-3, results, learnings, overview.
 14. **Hardening**: degraded states, permissions tests, mobile and a11y passes, load test.
+15a. ✅ **Real creators + roster (2026-10-29)**: stage 10 (`src/lib/pipeline/stages/discover.ts`), `brand_creator` and `discovered_creator` tables, roster logic and CSV import (`src/lib/roster`), `/brand/creators`, the "Real creators Qloo matched" band on each direction, quote-required casting, roster permissions (`roster.manage`, `roster.creator`). The showcase seed backfills stage 10 onto runs researched before it existed.
+15b. ✅ **Precise control (2026-10-29)**: edit a proposal (new version credited to the user, evidence carried over), "Same idea, simpler production" (agent version listing what was simplified), swap the creator (new proposal for the same direction, old one set aside with the reason, budget re-planned, no research redone), version history, side-by-side compare of 2–3 proposals, what-if budget on the plan (instant, nothing saved). `src/lib/proposals/control.ts`.
+15c. ✅ **Brand profile (2026-10-29)**: `/brand/profile` with documents (PDF via `unpdf`, text, or pasted) → statements of eight kinds, each with an exact passage checked against the document and its page → review and approve. New briefs list approved statements (ticked by default): research and beliefs become brief inputs linked to their passage, rules join the constraints. **Stage 11 "Checking against what you know"** reads each direction against the approved profile and flags tension (e.g. research says convenience beats craftsmanship) as a fourth check, citing the statements. The demo brand and the showcase carry a clearly labelled made-up interview document.
+15d. **Commission tracker** and **heatmap** (P2).
 15. **Deploy and submit**. *2026-10-28: a full run verified in production over HTTP (sign-in → brief → "Which did you mean?" → 4 directions, 8 proposals, 3 packages). No Hobby function timeouts: directions ≈50 s, casting ≈2 min, proposals ≈70 s.* *Deploy as soon as there's a GitHub repo, and keep it deployed from step 3 onward.*
 
 ---
@@ -378,3 +391,14 @@ Integration notes:
 - Identity tables are generated into `src/db/auth-schema.ts` with `pnpm auth:generate`, which also runs `drizzle-kit generate`. Migration `0001` adds them.
 - `BETTER_AUTH_SECRET` is in `.env.local` (generated locally). Production needs its own secret and `BETTER_AUTH_URL` set to the deployed origin.
 - §8.4 follow-up: done. App tables reference `organization` and `user`; `org_profile(kind)` marks brand vs creator orgs; `authorize()` lives in `src/lib/auth/authorize.ts` (`requireAuthorized()` in server code).
+
+---
+
+## 14. Product review 2 (2026-10-29): roster, knowledge base, control, handoff
+
+| Idea | Decision |
+|---|---|
+| 1. Bring your own creator roster | **Accepted, P0, combined with Qloo's people data** (§1): real creators per direction, roster matching by handle, audience lean with source and date, "Quote required" instead of exclusion. *Deferred:* the creator/manager confirmation link — it needs a creator-facing page, the reason the creator side was cut on 2026-10-28. |
+| 2. Persistent brand knowledge base | **Accepted, focused (P1):** documents → extracted statements with their quoted passage → approval → reused in briefs; a per-direction check against what the brand knows. *Deferred:* imported "measured" results until something produces results (manual entries only). |
+| 3. Precise control over recommendations | **Accepted, the visible parts (P1).** *Deferred:* locking a direction across re-research, which conflicts with immutable revisions (§4.4). |
+| 4. Production handoff | **Adjusted (P2):** a brand-side tracker only. *Deferred:* timestamped video review and creator links; Aspire and Modash already cover execution, so the pitch is integration, not replacement. |

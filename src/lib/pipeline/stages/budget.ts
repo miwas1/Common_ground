@@ -101,31 +101,37 @@ export function buildPackages(items: PlanItem[], budget: number | null, currency
     .map((p) => ({ ...p, rationale: `${p.rationale} Total ${formatMoney(p.costCents, currency)}${budget ? ` of ${formatMoney(budget, currency)}` : ""}.` }));
 }
 
+/** The run's priced, active proposals as plan items; proposals still waiting for a quote are counted. */
+export async function planItems(db: StageCtx["db"], runId: string) {
+  const { revision } = await loadRun(db, runId);
+  // Proposals set aside (replaced by a swap) are no longer options.
+  const proposals = (await proposalsWithVersions(db, runId)).filter((p) => p.proposal.status !== "set_aside");
+  const dirs = new Map((await db.select().from(direction).where(eq(direction.runId, runId))).map((d) => [d.id, d.title]));
+  const fits = await db.select().from(creatorFit).where(eq(creatorFit.runId, runId));
+  const creators = new Map((await db.select().from(creator)).map((c) => [c.id, c]));
+
+  // Only priced proposals can be planned; ones still waiting for a quote are left out and counted.
+  const priced = proposals.filter((p) => p.version && (p.version.terms as { amountCents: number | null }).amountCents !== null);
+  const items: PlanItem[] = priced.map(({ proposal: pr, version }) => {
+    const terms = version!.terms as { amountCents: number; currency: string; package: string };
+    const c = creators.get(pr.creatorId)!;
+    const fit = fits.find((f) => f.creatorId === pr.creatorId && f.directionId === pr.directionId);
+    return {
+      proposalId: pr.id,
+      directionId: pr.directionId,
+      directionTitle: dirs.get(pr.directionId) ?? "",
+      creatorName: c.displayName,
+      costCents: convertCents(terms.amountCents, terms.currency, revision.currency),
+      capability: ((fit?.capability as Capability | undefined)?.level ?? "none") as Capability["level"],
+      distribution: c.modes.includes("creator_distribution") && /post|posted|takeover|segment|whitelist/i.test(terms.package),
+      production: c.modes.includes("ugc_production"),
+    };
+  });
+  return { items, revision, awaitingQuote: proposals.filter((p) => p.version).length - priced.length };
+}
+
 export async function planBudget(ctx: StageCtx) {
-  const { revision } = await loadRun(ctx.db, ctx.runId);
-  const proposals = await proposalsWithVersions(ctx.db, ctx.runId);
-  const dirs = new Map((await ctx.db.select().from(direction).where(eq(direction.runId, ctx.runId))).map((d) => [d.id, d.title]));
-  const fits = await ctx.db.select().from(creatorFit).where(eq(creatorFit.runId, ctx.runId));
-  const creators = new Map((await ctx.db.select().from(creator)).map((c) => [c.id, c]));
-
-  const items: PlanItem[] = proposals
-    .filter((p) => p.version)
-    .map(({ proposal: pr, version }) => {
-      const terms = version!.terms as { amountCents: number; currency: string; package: string };
-      const c = creators.get(pr.creatorId)!;
-      const fit = fits.find((f) => f.creatorId === pr.creatorId && f.directionId === pr.directionId);
-      return {
-        proposalId: pr.id,
-        directionId: pr.directionId,
-        directionTitle: dirs.get(pr.directionId) ?? "",
-        creatorName: c.displayName,
-        costCents: convertCents(terms.amountCents, terms.currency, revision.currency),
-        capability: ((fit?.capability as Capability | undefined)?.level ?? "none") as Capability["level"],
-        distribution: c.modes.includes("creator_distribution") && /post|posted|takeover|segment|whitelist/i.test(terms.package),
-        production: c.modes.includes("ugc_production"),
-      };
-    });
-
+  const { items, revision, awaitingQuote } = await planItems(ctx.db, ctx.runId);
   await ctx.db.delete(budgetPackage).where(eq(budgetPackage.runId, ctx.runId));
   const packages = buildPackages(items, revision.budgetCents, revision.currency, revision.campaignType);
   if (packages.length) {
@@ -133,5 +139,5 @@ export async function planBudget(ctx: StageCtx) {
       packages.map((p) => ({ runId: ctx.runId, kind: p.kind, proposalIds: p.items.map((i) => i.proposalId), costCents: p.costCents, rationale: p.rationale })),
     );
   }
-  return { packages: packages.map((p) => ({ kind: p.kind, proposals: p.items.length, costCents: p.costCents })) };
+  return { packages: packages.map((p) => ({ kind: p.kind, proposals: p.items.length, costCents: p.costCents })), awaitingQuote };
 }

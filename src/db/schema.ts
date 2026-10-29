@@ -101,6 +101,8 @@ export const briefInput = pgTable("brief_input", {
   text: text("text").notNull(),
   source: inputSource("source").notNull(),
   confirmed: boolean("confirmed").notNull().default(false),
+  /** Set when the input came from the brand profile, so its source passage stays reachable. */
+  brandFactId: uuid("brand_fact_id").references((): AnyPgColumn => brandFact.id, { onDelete: "set null" }),
 });
 
 export const resolutionStatus = pgEnum("resolution_status", ["confirmed", "needs_input", "rejected"]);
@@ -246,6 +248,8 @@ export const claim = pgTable(
     kind: claimKind("kind").notNull(),
     text: text("text").notNull(),
     createdBy: text("created_by").notNull(), // template | model
+    /** Baseline runs only: the brief statements an unbound interpretation cites (the brief has no evidence rows). */
+    basis: text("basis").array(),
   },
   (t) => [
     index("claim_owner_idx").on(t.ownerType, t.ownerId),
@@ -337,8 +341,85 @@ export const creator = pgTable("creator", {
   declinedCategories: text("declined_categories").array().notNull().default([]),
   /** Distribution only; self-reported or authorized platform data, with its source. */
   audienceStats: jsonb("audience_stats"),
+  /** Public social handles, without "@": { instagram?, tiktok?, youtube?, twitter? }. */
+  handles: jsonb("handles").notNull().default({}),
+  /** How to reach them: { email?, manager? }. Never sent to Qloo. */
+  contact: jsonb("contact").notNull().default({}),
+  /** The matching Qloo person (urn:entity:person), when the creator is known to Qloo. */
+  qlooPersonId: text("qloo_person_id"),
+  /** What Qloo returned for that person, with when and how it was matched (see QlooPersonProfile). */
+  qlooProfile: jsonb("qloo_profile"),
   createdAt: createdAt(),
 });
+
+/** Documents a brand uploads (customer research, guidelines, results). Only the extracted text is kept. */
+export const brandDocument = pgTable("brand_document", {
+  id: id(),
+  brandOrganizationId: orgRef("brand_organization_id").notNull(),
+  name: text("name").notNull(),
+  /** Plain text. PDF pages are marked with "[page N]" lines so passages can be traced to a page. */
+  text: text("text").notNull(),
+  pages: integer("pages"),
+  uploadedBy: userRef("uploaded_by"),
+  createdAt: createdAt(),
+});
+
+/**
+ * What a brand knows, kept across campaigns. Kinds keep sources apart: research (what customers said
+ * or did), belief (what the team thinks), measured (what past campaigns showed), plus product facts,
+ * positioning, tone, approved claims and things to avoid. Qloo's suggestions never live here.
+ */
+export const brandFactKind = pgEnum("brand_fact_kind", ["research", "belief", "measured", "product", "positioning", "tone", "approved_claim", "avoid"]);
+
+export const brandFact = pgTable(
+  "brand_fact",
+  {
+    id: id(),
+    brandOrganizationId: orgRef("brand_organization_id").notNull(),
+    kind: brandFactKind("kind").notNull(),
+    text: text("text").notNull(),
+    documentId: uuid("document_id").references(() => brandDocument.id, { onDelete: "cascade" }),
+    /** The passage it came from, copied exactly; checked to appear in the document. */
+    quote: text("quote"),
+    page: integer("page"),
+    /** suggested (extracted, waiting for review) | approved | rejected */
+    status: text("status").notNull().default("suggested"),
+    /** model (extracted from a document) | user (typed in) */
+    createdBy: text("created_by").notNull(),
+    addedBy: userRef("added_by"),
+    decidedBy: userRef("decided_by"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("brand_fact_org_idx").on(t.brandOrganizationId)],
+);
+
+/**
+ * A brand's private roster: the creators a team can commission, with its own notes and decisions.
+ * Creators a brand adds itself are owned by the brand's organization; the shared demo roster is not.
+ */
+export const brandCreator = pgTable(
+  "brand_creator",
+  {
+    brandOrganizationId: orgRef("brand_organization_id").notNull(),
+    creatorId: uuid("creator_id")
+      .notNull()
+      .references(() => creator.id, { onDelete: "cascade" }),
+    preferred: boolean("preferred").notNull().default(false),
+    excluded: boolean("excluded").notNull().default(false),
+    exclusionReason: text("exclusion_reason"),
+    notes: text("notes").notNull().default(""),
+    /** Previous work with this brand, in the team's words. */
+    collaborations: text("collaborations").array().notNull().default([]),
+    /** demo | import | manual | qloo */
+    source: text("source").notNull(),
+    /** Who supplied a field and when: { rate?: { by, at }, availability?: { by, at }, audience?: { by, at } }. */
+    provenance: jsonb("provenance").notNull().default({}),
+    addedBy: userRef("added_by"),
+    addedAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.brandOrganizationId, t.creatorId] })],
+);
 
 export const portfolioItem = pgTable("portfolio_item", {
   id: id(),
@@ -391,6 +472,8 @@ export const quote = pgTable("quote", {
   usageTerms: text("usage_terms").notNull(),
   validUntil: timestamp("valid_until", { withTimezone: true }),
   source: text("source").notNull(), // rate_card | quote
+  /** Who gave this price, in words ("Alex Rivera, from the creator's manager"). */
+  suppliedBy: text("supplied_by"),
   createdAt: createdAt(),
 });
 
@@ -419,6 +502,35 @@ export const creatorFit = pgTable(
 );
 
 // ── Proposals, versions, offers, packages ───────────────────────────────────
+
+/**
+ * Real creators Qloo matched to a direction: people tagged as creators (YouTuber, TikToker, blogger…)
+ * whose aggregate audience shares the direction's taste. Ranked within one query per direction.
+ */
+export const discoveredCreator = pgTable(
+  "discovered_creator",
+  {
+    id: id(),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => run.id, { onDelete: "cascade" }),
+    directionId: uuid("direction_id")
+      .notNull()
+      .references(() => direction.id, { onDelete: "cascade" }),
+    evidenceId: uuid("evidence_id").references(() => evidence.id, { onDelete: "set null" }),
+    qlooPersonId: text("qloo_person_id").notNull(),
+    name: text("name").notNull(),
+    instagram: text("instagram"),
+    occupations: text("occupations").array().notNull().default([]),
+    description: text("description"),
+    /** Position in this direction's result list, and the list's length. */
+    rank: integer("rank").notNull(),
+    resultCount: integer("result_count").notNull(),
+    /** Qloo's aggregate age and gender skew for the people who like this creator. */
+    audience: jsonb("audience"),
+  },
+  (t) => [index("discovered_creator_run_idx").on(t.runId)],
+);
 
 export const proposalStatus = pgEnum("proposal_status", [
   "draft",

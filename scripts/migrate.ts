@@ -19,10 +19,13 @@ async function main() {
   }
 }
 
+// Close PGlite before exiting: leaving it open can corrupt .pglite (a no-op with Neon).
+const closeDb = () => import("@/db").then(({ closeLocalDb }) => closeLocalDb());
+
 main().then(
-  () => process.exit(0),
+  () => closeDb().finally(() => process.exit(0)),
   (err) => {
     console.error(err);
-    process.exit(1);
+    closeDb().finally(() => process.exit(1));
   },
 );

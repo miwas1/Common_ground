@@ -38,6 +38,10 @@ export default function SignInPage() {
         </div>
         <Button type="submit" variant="secondary">Sign in with email</Button>
       </ActionForm>
+      <p className="mt-4 text-sm text-muted-foreground">
+        New here?{" "}
+        <Link href="/sign-up" className="font-medium text-primary underline-offset-4 hover:underline">Create an account</Link>
+      </p>
     </main>
   );
 }

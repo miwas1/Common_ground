@@ -8,12 +8,8 @@ import { formatIssues, type Issue } from "@/lib/claims/validate";
 
 export type Effort = "low" | "medium" | "high" | "xhigh";
 
-/** The only models the app may call. Anything else is a configuration error, not a silent fallback. */
-export const ALLOWED_MODELS = ["claude-sonnet-5-5", "claude-haiku-5-5"] as const;
-export type AllowedModel = (typeof ALLOWED_MODELS)[number];
-
-/** "standard" for judgment and writing (Sonnet 5.5); "fast" for light extraction (Haiku 5.5). */
-export type Tier = "standard" | "fast";
+/** The one model the app calls. Each step sets its own effort: low for extraction, high for writing. */
+export const MODEL = "claude-haiku-5-5";
 
 export type ObjectRequest<S extends z.ZodType> = {
   /** Short label for logs and errors. */
@@ -23,13 +19,27 @@ export type ObjectRequest<S extends z.ZodType> = {
   schema: S;
   effort?: Effort;
   maxTokens?: number;
-  tier?: Tier;
   /** Appended after the cached prompt, e.g. the problems from a rejected attempt; never cached. */
   followUp?: string;
 };
 
+export type ResearchRequest = {
+  name: string;
+  system: string;
+  prompt: string;
+  /** Upper bound on web searches for this call. */
+  maxSearches?: number;
+};
+
+export type ResearchResult = { text: string; sources: { title: string; url: string }[] };
+
 export interface Llm {
   object<S extends z.ZodType>(req: ObjectRequest<S>): Promise<z.infer<S>>;
+  /**
+   * Free-text research with live web search. Optional: fakes and offline runs leave it out,
+   * and callers carry on without background research.
+   */
+  research?(req: ResearchRequest): Promise<ResearchResult>;
 }
 
 export class LlmRefusalError extends Error {
@@ -49,32 +59,18 @@ export class LlmValidationError extends Error {
   }
 }
 
-export const DEFAULT_MODELS: Record<Tier, AllowedModel> = { standard: "claude-sonnet-5-5", fast: "claude-haiku-5-5" };
-
-export function resolveModel(tier: Tier, configured: string | undefined): AllowedModel {
-  const model = configured || DEFAULT_MODELS[tier];
-  if (!(ALLOWED_MODELS as readonly string[]).includes(model)) {
-    throw new Error(`Model "${model}" is not allowed; use one of ${ALLOWED_MODELS.join(", ")}`);
-  }
-  return model as AllowedModel;
-}
-
 // Prompt caching: the system prompt (with the output schema rendered ahead of it) and the stage prompt
 // are each a cache breakpoint. Validation retries resend the same prefix with a follow-up block after it,
 // and stages that call once per direction share the system prefix, so both read from the cache.
 const CACHE = { type: "ephemeral" } as const;
 
-export function anthropicLlm(opts: { apiKey?: string; models?: Partial<Record<Tier, string>> } = {}): Llm {
+export function anthropicLlm(opts: { apiKey?: string } = {}): Llm {
   const client = new Anthropic(opts.apiKey ? { apiKey: opts.apiKey } : {});
-  const models: Record<Tier, AllowedModel> = {
-    standard: resolveModel("standard", opts.models?.standard ?? process.env.LLM_MODEL),
-    fast: resolveModel("fast", opts.models?.fast ?? process.env.LLM_FAST_MODEL),
-  };
+  const model = MODEL;
 
   return {
-    async object<S extends z.ZodType>({ name, system, prompt, followUp, schema, effort = "medium", maxTokens = 16000, tier = "standard" }: ObjectRequest<S>) {
-      const model = models[tier];
-      // No server-side refusal fallback: it would re-run the request on a model outside ALLOWED_MODELS.
+    async object<S extends z.ZodType>({ name, system, prompt, followUp, schema, effort = "medium", maxTokens = 16000 }: ObjectRequest<S>) {
+      // No refusal fallback: it would re-run the request on another model.
       // A refusal stops the step with LlmRefusalError instead.
       const response = await client.messages.parse({
         model,
@@ -101,6 +97,41 @@ export function anthropicLlm(opts: { apiKey?: string; models?: Partial<Record<Ti
       if (response.parsed_output == null) throw new Error(`${name}: no structured output returned`);
       return response.parsed_output as z.infer<S>;
     },
+
+    // Web search is a server tool: Anthropic runs the searches inside the request. Long searches can
+    // end a turn with pause_turn; sending the partial answer back lets the model carry on.
+    research:
+      process.env.WEB_RESEARCH === "off"
+        ? undefined
+        : async ({ name, system, prompt, maxSearches = 5 }: ResearchRequest): Promise<ResearchResult> => {
+            const messages: Anthropic.MessageParam[] = [{ role: "user", content: prompt }];
+            const text: string[] = [];
+            const sources = new Map<string, string>();
+            for (let turn = 0; turn < 4; turn++) {
+              const response = await client.messages.create({
+                model,
+                max_tokens: 8000,
+                thinking: { type: "adaptive" },
+                output_config: { effort: "medium" },
+                system: [{ type: "text", text: system, cache_control: CACHE }],
+                tools: [{ type: "web_search_20250305", name: "web_search", max_uses: maxSearches }],
+                messages,
+              });
+              const u = response.usage;
+              console.info(`llm ${name} model=${model} in=${u.input_tokens} out=${u.output_tokens} searches=${u.server_tool_use?.web_search_requests ?? 0}`);
+              if (response.stop_reason === "refusal") throw new LlmRefusalError(name, response.stop_details?.category ?? null);
+              for (const block of response.content) {
+                if (block.type === "text") text.push(block.text);
+                // An error result's content is an object, a success is a list of results.
+                if (block.type === "web_search_tool_result" && Array.isArray(block.content)) {
+                  for (const r of block.content) if (!sources.has(r.url)) sources.set(r.url, r.title);
+                }
+              }
+              if (response.stop_reason !== "pause_turn") break;
+              messages.push({ role: "assistant", content: response.content });
+            }
+            return { text: text.join("").trim(), sources: [...sources].map(([url, title]) => ({ url, title })).slice(0, 8) };
+          },
   };
 }
 

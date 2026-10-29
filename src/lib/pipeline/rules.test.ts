@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { buildPackages, type PlanItem } from "./stages/budget";
-import { bandFor, bestBand, shortlistOrder, withoutKeys } from "./stages/cast";
-import { convertCents } from "./money";
+import { bandFor, bestBand, hardConstraints, shortlistOrder, withoutKeys, type RosterEntry } from "./stages/cast";
+import type { LoadedRun } from "./context";
+import { convertCents, formatFee } from "./money";
+import { withoutStatementKeys } from "./stages/fit";
 
 describe("cultural bands", () => {
   const positions = new Map([["a", 0], ["b", 5], ["c", 9]]);
@@ -31,6 +33,46 @@ describe("cultural bands", () => {
     });
     const sorted = [x("partial", 3, 100), x("strong", 0, 500), x("strong", 1, 900), x("strong", 1, 200)].sort(shortlistOrder);
     expect(sorted.map((s) => [s.capability.level, s.cheapestCents])).toEqual([["strong", 200], ["strong", 900], ["strong", 500], ["partial", 100]]);
+  });
+
+  it("breaks ties with the team's preferred creators, never lifting them over past work; unpriced creators go last", () => {
+    const x = (level: "strong" | "not assessed", preferred: boolean, cents: number | null) => ({ capability: { level, reason: null, portfolioItemIds: [] }, bands: {}, cheapestCents: cents, preferred });
+    const sorted = [x("strong", false, 100), x("strong", false, null), x("strong", true, 900), x("not assessed", true, 50)].sort(shortlistOrder);
+    expect(sorted.map((s) => [s.capability.level, s.preferred, s.cheapestCents])).toEqual([
+      ["strong", true, 900],
+      ["strong", false, 100],
+      ["strong", false, null],
+      ["not assessed", true, 50],
+    ]);
+  });
+});
+
+describe("hard constraints", () => {
+  const run = { revision: { markets: ["US"], languages: ["en"], campaignType: "ugc_production", currency: "USD", budgetCents: 1_000_000 } } as unknown as LoadedRun;
+  const entry = (over: { creator?: object; quotes?: object[]; link?: object | null } = {}) =>
+    ({
+      creator: { country: "US", languages: ["en"], modes: ["ugc_production"], availability: {}, declinedCategories: [], ...over.creator },
+      quotes: over.quotes ?? [{ amountCents: 150_000, currency: "USD" }],
+      link: over.link ?? null,
+      portfolio: [],
+      refs: [],
+      themes: [],
+    }) as unknown as RosterEntry;
+
+  it("keeps a creator with no quote in the running as quote required", () => {
+    expect(hardConstraints(entry({ quotes: [] }), run, "coffee")).toMatchObject({ passed: true, quoteRequired: true, cheapestCents: null });
+  });
+
+  it("rules out a quote over budget, and a creator the team excluded, with the reason", () => {
+    expect(hardConstraints(entry({ quotes: [{ amountCents: 2_000_000, currency: "USD" }] }), run, "coffee").failures).toEqual(["Lowest quote exceeds the budget"]);
+    expect(hardConstraints(entry({ link: { excluded: true, exclusionReason: "Works with a competitor" } }), run, "coffee").failures).toEqual([
+      "Excluded by your team: Works with a competitor",
+    ]);
+  });
+
+  it("treats fields a brand hasn't recorded as unknown, not failures", () => {
+    expect(hardConstraints(entry({ creator: { country: "", languages: [], modes: [] } }), run, "coffee").passed).toBe(true);
+    expect(hardConstraints(entry({ creator: { country: "GB" } }), run, "coffee").failures).toEqual(["Based outside the campaign markets (GB)"]);
   });
 });
 
@@ -68,6 +110,11 @@ describe("money", () => {
     expect(convertCents(127_000, "USD", "GBP")).toBe(100_000);
     expect(() => convertCents(1, "JPY", "USD")).toThrow();
   });
+
+  it("shows a missing price as quote required", () => {
+    expect(formatFee({ amountCents: null, currency: "USD" })).toBe("Quote required");
+    expect(formatFee({ amountCents: 150_000, currency: "USD" })).toBe("$1,500");
+  });
 });
 
 describe("capability reasons", () => {
@@ -75,5 +122,12 @@ describe("capability reasons", () => {
     expect(withoutKeys("Hosting videos (P2, P3) show a warm counter style.")).toBe("Hosting videos show a warm counter style.");
     expect(withoutKeys("Kitchen work (P12) for C4 fits.")).toBe("Kitchen work for fits.");
     expect(withoutKeys("No relevant work.")).toBe("No relevant work.");
+  });
+});
+
+describe("profile check notes", () => {
+  it("drops statement keys the model leaves in prose", () => {
+    expect(withoutStatementKeys("Customers host at weekends (K4), and hosting videos did well (K5, K6).")).toBe("Customers host at weekends, and hosting videos did well.");
+    expect(withoutStatementKeys("As K2 says, speed wins.")).toBe("As says, speed wins.");
   });
 });

@@ -1,13 +1,16 @@
 // Stage 7 — casting (PLAN.md §4.3). Separate dimensions, never one "match %":
 //   hard constraints → capability (portfolio, model-judged, bound to items) → cultural bands (Qloo).
+// The roster is the brand's own (brand_creator); a brand that hasn't added anyone yet uses the demo roster.
 // Cultural fit: one scoring query per (direction, entity type) over the whole roster, ranked within
 // that query only; each creator gets their best reference (more references never help);
 // a reference Qloo does not return is "not measured", not zero. City never counts as cultural fit.
+// Creators Qloo knows as people also get an audience band: the person ranked against the direction.
+// A creator with no quote stays in the running as "quote required"; only a quote over budget rules them out.
 
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
 import type { Db } from "@/db";
-import { claim, creator, creatorFit, creatorReference, creatorTheme, portfolioItem, quote } from "@/db/schema";
+import { brandCreator, claim, creator, creatorFit, creatorReference, creatorTheme, discoveredCreator, orgProfile, portfolioItem, quote } from "@/db/schema";
 import { attachPortfolioClaim } from "@/lib/claims/persist";
 import { checkInterpretation, PROSE_RULES, type Issue } from "@/lib/claims/validate";
 import { objectWithValidation } from "@/lib/llm";
@@ -29,11 +32,20 @@ const TYPE_LABEL: Record<string, string> = {
   "urn:entity:book": "books",
   "urn:entity:brand": "brands",
 };
+/** The band for a creator Qloo knows as a person: how their audience ranks against the direction. */
+export const AUDIENCE_BAND = "audience";
 export const SHORTLIST_SIZE = 3;
 const SCORE_PAGE = 50;
 
-export async function loadRoster(db: Db) {
-  const creators = await db.select().from(creator);
+export async function loadRoster(db: Db, brandOrganizationId: string | null) {
+  const links = brandOrganizationId ? await db.select().from(brandCreator).where(eq(brandCreator.brandOrganizationId, brandOrganizationId)) : [];
+  const [profile] = brandOrganizationId ? await db.select({ isDemo: orgProfile.isDemo }).from(orgProfile).where(eq(orgProfile.organizationId, brandOrganizationId)) : [];
+  // A brand that hasn't added creators yet works from the shared demo roster. Demo brands (shared by
+  // everyone trying the product) always keep it, so one visitor's additions never empty another's casting.
+  const useDemo = links.length === 0 || (profile?.isDemo ?? false);
+  const own = links.length ? await db.select().from(creator).where(inArray(creator.id, links.map((l) => l.creatorId))) : [];
+  const demo = useDemo ? await db.select().from(creator).where(eq(creator.isDemo, true)) : [];
+  const creators = [...new Map([...demo, ...own].map((c) => [c.id, c])).values()];
   const ids = creators.map((c) => c.id);
   if (ids.length === 0) return [];
   const [items, refs, themes, quotes] = await Promise.all([
@@ -44,6 +56,8 @@ export async function loadRoster(db: Db) {
   ]);
   return creators.map((c) => ({
     creator: c,
+    /** The brand's own record of this creator (preferred, excluded, notes); null on the demo fallback. */
+    link: links.find((l) => l.creatorId === c.id) ?? null,
     portfolio: items.filter((i) => i.creatorId === c.id),
     refs: refs.filter((r) => r.creatorId === c.id && r.qlooId),
     themes: themes.filter((t) => t.creatorId === c.id && t.tagId),
@@ -56,19 +70,21 @@ export function hardConstraints(entry: RosterEntry, run: LoadedRun, productCateg
   const { creator: c } = entry;
   const r = run.revision;
   const failures: string[] = [];
-  if (!r.markets.includes(c.country)) failures.push(`Based outside the campaign markets (${c.country})`);
-  if (!c.languages.some((l) => r.languages.includes(l))) failures.push("Does not work in the campaign languages");
+  // Fields a brand hasn't recorded (country, languages, work types) are unknown, not failures.
+  if (entry.link?.excluded) failures.push(`Excluded by your team${entry.link.exclusionReason ? `: ${entry.link.exclusionReason}` : ""}`);
+  if (c.country && !r.markets.includes(c.country)) failures.push(`Based outside the campaign markets (${c.country})`);
+  if (c.languages.length && !c.languages.some((l) => r.languages.includes(l))) failures.push("Does not work in the campaign languages");
   const availability = c.availability as { status?: string; leadTimeDays?: number };
   if (availability.status === "booked") failures.push("Fully booked");
-  if (r.campaignType === "ugc_production" && !c.modes.includes("ugc_production")) failures.push("Does not take production-only work");
-  if (r.campaignType === "creator_distribution" && !c.modes.includes("creator_distribution")) failures.push("Does not offer distribution");
+  if (c.modes.length && r.campaignType === "ugc_production" && !c.modes.includes("ugc_production")) failures.push("Does not take production-only work");
+  if (c.modes.length && r.campaignType === "creator_distribution" && !c.modes.includes("creator_distribution")) failures.push("Does not offer distribution");
   const category = productCategory.toLowerCase();
   const declined = c.declinedCategories.find((d) => category.includes(d.toLowerCase()) || d.toLowerCase().includes(category));
   if (declined) failures.push(`Declines ${declined} work`);
   const cheapest = Math.min(...entry.quotes.map((q) => convertCents(q.amountCents, q.currency, r.currency)));
-  if (!Number.isFinite(cheapest)) failures.push("No quote on file");
-  else if (r.budgetCents && cheapest > r.budgetCents) failures.push("Lowest quote exceeds the budget");
-  return { passed: failures.length === 0, failures, cheapestCents: Number.isFinite(cheapest) ? cheapest : null };
+  const quoteRequired = !Number.isFinite(cheapest);
+  if (!quoteRequired && r.budgetCents && cheapest > r.budgetCents) failures.push("Lowest quote exceeds the budget");
+  return { passed: failures.length === 0, failures, cheapestCents: quoteRequired ? null : cheapest, quoteRequired };
 }
 
 /** Rank → band within one query's returned results. */
@@ -87,14 +103,19 @@ export function bestBand(items: { id: string; label: string }[], positions: Map<
 
 const LEVEL: Record<Capability["level"], number> = { strong: 2, partial: 1, none: 0, "not assessed": -1 };
 
-/** Deterministic shortlist rule, shown in the UI: capability, then top-quarter bands, then middle bands, then price. */
+/**
+ * Deterministic shortlist rule, shown in the UI: capability, then the team's preferred creators, then
+ * top-quarter bands, then middle bands, then price (creators still to quote come after priced ones).
+ * Preferred breaks ties within a capability level; it never lifts a creator over relevant past work.
+ */
 export function shortlistOrder(
-  a: { capability: Capability; bands: Record<string, BandResult>; cheapestCents: number | null },
+  a: { capability: Capability; bands: Record<string, BandResult>; cheapestCents: number | null; preferred?: boolean },
   b: typeof a,
 ) {
   const count = (x: typeof a, band: Band) => Object.values(x.bands).filter((r) => r.band === band).length;
   return (
     LEVEL[b.capability.level] - LEVEL[a.capability.level] ||
+    Number(b.preferred ?? false) - Number(a.preferred ?? false) ||
     count(b, "top quarter") - count(a, "top quarter") ||
     count(b, "middle") - count(a, "middle") ||
     (a.cheapestCents ?? Infinity) - (b.cheapestCents ?? Infinity)
@@ -121,6 +142,24 @@ async function culturalBands(ctx: StageCtx, p: DirectionProfile, roster: RosterE
     affinities.sort((a, b) => b[1] - a[1]);
     positions.set(type, { positions: new Map(affinities.map(([id], i) => [id, i])), returned: affinities.length });
   }
+  // Creators Qloo knows as people: rank them against the direction in one query, together with the
+  // people Qloo found for this direction (stage 10), so a band means "compared with the best-matching
+  // real people", not "first of the two roster creators Qloo happens to know".
+  const found = await ctx.db.select({ id: discoveredCreator.qlooPersonId }).from(discoveredCreator).where(and(eq(discoveredCreator.runId, ctx.runId), eq(discoveredCreator.directionId, p.direction.id)));
+  const rosterPeople = roster.map((e) => e.creator.qlooPersonId).filter((x): x is string => Boolean(x));
+  const personIds = rosterPeople.length ? [...new Set([...rosterPeople, ...found.map((f) => f.id)])] : [];
+  let personPositions = { positions: new Map<string, number>(), returned: 0 };
+  if (personIds.length) {
+    const affinities: [string, number][] = [];
+    for (let i = 0; i < personIds.length; i += SCORE_PAGE) {
+      const res = await ctx.qloo.scoreEntities({ type: "urn:entity:person", signals, entityIds: personIds.slice(i, i + SCORE_PAGE) });
+      if (res.status === "error") throw new Error(`Qloo scoring failed (creators): ${res.error.message}`);
+      for (const e of res.data.entities) if (e.affinity !== undefined) affinities.push([e.id, e.affinity]);
+    }
+    affinities.sort((a, b) => b[1] - a[1]);
+    personPositions = { positions: new Map(affinities.map(([id], i) => [id, i])), returned: affinities.length };
+  }
+
   const themeIds = [...new Set(roster.flatMap((e) => e.themes.map((t) => t.tagId!)))];
   let themePositions = { positions: new Map<string, number>(), returned: 0 };
   if (themeIds.length) {
@@ -139,6 +178,9 @@ async function culturalBands(ctx: StageCtx, p: DirectionProfile, roster: RosterE
       }
       const myThemes = e.themes.map((t) => ({ id: t.tagId!, label: t.label }));
       if (myThemes.length) bands.themes = bestBand(myThemes, themePositions.positions, themePositions.returned);
+      if (e.creator.qlooPersonId) {
+        bands[AUDIENCE_BAND] = bestBand([{ id: e.creator.qlooPersonId, label: e.creator.displayName }], personPositions.positions, personPositions.returned);
+      }
       return [e.creator.id, bands];
     }),
   );
@@ -216,26 +258,32 @@ export async function cast(ctx: StageCtx) {
   const run = await loadRun(ctx.db, ctx.runId);
   const parsed = await stageOutput<ParsedBrief>(ctx.db, ctx.runId, 1);
   const profiles = await directionProfiles(ctx.db, ctx.runId);
-  const roster = await loadRoster(ctx.db);
+  const roster = await loadRoster(ctx.db, run.campaign.organizationId);
 
   await ctx.db.delete(claim).where(and(eq(claim.runId, ctx.runId), eq(claim.ownerType, "creator_fit")));
   await ctx.db.delete(creatorFit).where(eq(creatorFit.runId, ctx.runId));
 
   const constraints = new Map(roster.map((e) => [e.creator.id, hardConstraints(e, run, parsed.productCategory)]));
   const passing = roster.filter((e) => constraints.get(e.creator.id)!.passed);
+  // Capability is judged from portfolio work; a creator with none on file is "not assessed", not ruled out.
+  const judged = passing.filter((e) => e.portfolio.length > 0);
 
   const summary: { directionId: string; shortlisted: string[]; passing: number }[] = [];
   for (const p of profiles) {
     const [bands, capability] = await Promise.all([
-      passing.length ? culturalBands(ctx, p, passing) : Promise.resolve(new Map<string, Record<string, BandResult>>()),
-      passing.length ? judgeCapability(ctx, p, passing) : Promise.resolve(new Map<string, Capability>()),
+      // A baseline run has no Qloo profile: capability and price decide the shortlist on their own.
+      passing.length && ctx.mode !== "baseline" ? culturalBands(ctx, p, passing) : Promise.resolve(new Map<string, Record<string, BandResult>>()),
+      judged.length ? judgeCapability(ctx, p, judged) : Promise.resolve(new Map<string, Capability>()),
     ]);
     const ranked = passing
       .map((e) => ({
         entry: e,
-        capability: capability.get(e.creator.id) ?? ({ level: "none", reason: null, portfolioItemIds: [] } as Capability),
+        capability:
+          capability.get(e.creator.id) ??
+          ((e.portfolio.length ? { level: "none", reason: null, portfolioItemIds: [] } : { level: "not assessed", reason: null, portfolioItemIds: [] }) as Capability),
         bands: bands.get(e.creator.id) ?? {},
         cheapestCents: constraints.get(e.creator.id)!.cheapestCents,
+        preferred: e.link?.preferred ?? false,
       }))
       .filter((x) => x.capability.level !== "none")
       .sort(shortlistOrder);
@@ -243,7 +291,7 @@ export async function cast(ctx: StageCtx) {
 
     for (const e of roster) {
       const hc = constraints.get(e.creator.id)!;
-      const cap = hc.passed ? (capability.get(e.creator.id) ?? { level: "none", reason: null, portfolioItemIds: [] }) : { level: "not assessed", reason: null, portfolioItemIds: [] };
+      const cap = hc.passed && e.portfolio.length ? (capability.get(e.creator.id) ?? { level: "none", reason: null, portfolioItemIds: [] }) : { level: "not assessed", reason: null, portfolioItemIds: [] };
       const [fit] = await ctx.db
         .insert(creatorFit)
         .values({

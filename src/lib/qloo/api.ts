@@ -77,6 +77,20 @@ export class QlooApi {
     return this.client.get("/entities", { entity_ids: ids }, trimEntities, (d) => d.length === 0);
   }
 
+  /**
+   * The person behind a public Instagram handle (without "@"), if Qloo knows them. One handle per
+   * call: a batched lookup doesn't say which handle matched which entity. The same name can also
+   * come back as an author; only the person entity is kept.
+   */
+  personByInstagram(handle: string): Promise<QlooResult<QlooEntity[]>> {
+    return this.client.get(
+      "/entities",
+      { "external.instagram.ids": [handle] },
+      (raw) => trimEntities(raw).filter((e) => e.type === "urn:entity:person").slice(0, 1),
+      (d) => d.length === 0,
+    );
+  }
+
   /** Concept → tag URNs via semantic search over Qloo's tag ontology. */
   findTags(input: {
     query: string;
@@ -130,6 +144,8 @@ export class QlooApi {
     /** Constrain output to a place, e.g. local venues in "London". */
     inLocation?: string;
     tags?: string[];
+    /** How `tags` combine: "union" keeps results with any of them. Qloo's default is "intersection". */
+    tagsOperator?: "union" | "intersection";
     excludeTags?: string[];
     excludeEntities?: string[];
     popularityMin?: number;
@@ -142,6 +158,7 @@ export class QlooApi {
         ...signalParams(input.signals),
         "filter.location.query": input.inLocation,
         "filter.tags": input.tags,
+        "operator.filter.tags": input.tagsOperator,
         "filter.exclude.tags": input.excludeTags,
         "filter.exclude.entities": input.excludeEntities,
         "filter.popularity.min": input.popularityMin,

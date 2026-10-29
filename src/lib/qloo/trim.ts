@@ -34,6 +34,7 @@ const num = (v: unknown): number | undefined => {
 const compact = <T>(items: (T | undefined)[]): T[] => items.filter((i): i is T => i !== undefined);
 
 const MAX_TAGS_PER_ENTITY = 8;
+const OCCUPATION_PREFIX = "urn:tag:occupation:person:";
 
 function attributions(v: unknown): Attribution[] {
   return arr(v)
@@ -77,6 +78,23 @@ export function trimEntity(raw: unknown): QlooEntity | undefined {
 
   const attribution = attributions(obj(query.explainability)["signal.interests.entities"]);
   if (attribution.length > 0) entity.attribution = attribution;
+
+  if (type === "urn:entity:person") {
+    if (str(props.date_of_death)) entity.deceased = true;
+    const external = obj(e.external);
+    const handle = (key: string) => str(obj(arr(external[key])[0]).id);
+    const handles = { instagram: handle("instagram_username"), twitter: handle("twitter_username") };
+    if (handles.instagram || handles.twitter) entity.handles = handles;
+    // Occupations are read before tags are capped: people carry many tags.
+    entity.occupations = [
+      ...new Set(
+        arr(e.tags)
+          .map((t) => str(obj(t).id ?? obj(t).tag_id))
+          .filter((id): id is string => Boolean(id?.startsWith(OCCUPATION_PREFIX)))
+          .map((id) => id.slice(OCCUPATION_PREFIX.length)),
+      ),
+    ];
+  }
 
   if (type === "urn:entity:place") {
     const geocode = obj(props.geocode);

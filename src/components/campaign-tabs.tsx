@@ -7,10 +7,11 @@ export function CampaignTabs({ campaignId, counts }: { campaignId: string; count
   const pathname = usePathname();
   const base = `/brand/campaigns/${campaignId}`;
   const tabs = [
-    { href: base, label: "Strategy" },
+    { href: base, label: "Directions" },
     { href: `${base}/proposals`, label: `Proposals${counts.proposals ? ` ${counts.proposals}` : ""}` },
-    { href: `${base}/plan`, label: "Plan" },
-    ...(counts.revisions > 1 ? [{ href: `${base}/revisions`, label: `Revisions ${counts.revisions}` }] : []),
+    { href: `${base}/plan`, label: "Budget" },
+    ...(counts.revisions > 1 ? [{ href: `${base}/revisions`, label: `Versions ${counts.revisions}` }] : []),
+    { href: `${base}/evaluate`, label: "Without Qloo?" },
   ];
   const active = (href: string) => (href === base ? pathname === base : pathname.startsWith(href));
   return (

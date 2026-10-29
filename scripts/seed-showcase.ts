@@ -33,10 +33,13 @@ async function main() {
   console.log(`showcase  ${res.status}  campaign=${res.campaignId}`);
 }
 
+// Close PGlite before exiting: leaving it open can corrupt .pglite (a no-op with Neon).
+const closeDb = () => import("@/db").then(({ closeLocalDb }) => closeLocalDb());
+
 main().then(
-  () => process.exit(0),
+  () => closeDb().finally(() => process.exit(0)),
   (err) => {
     console.error("showcase  NOT READY:", err instanceof Error ? err.message : err);
-    process.exit(0);
+    closeDb().finally(() => process.exit(0));
   },
 );

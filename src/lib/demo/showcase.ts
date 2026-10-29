@@ -7,16 +7,18 @@ import { randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import type { Db } from "@/db";
 import { organization } from "@/db/auth-schema";
-import { briefInput, campaign, campaignRevision, orgProfile, resolvedReference, run } from "@/db/schema";
+import { briefInput, campaign, campaignRevision, orgProfile, resolvedReference, run, runStage } from "@/db/schema";
 import { deriveRevision } from "@/lib/campaigns/revisions";
 import type { Llm } from "@/lib/llm";
 import type { BriefForm } from "@/lib/pipeline/context";
 import { applyResolutionChoices } from "@/lib/pipeline/stages/resolve";
-import { STAGES } from "@/lib/pipeline/stages";
+import { DISCOVERY_METHOD } from "@/lib/pipeline/stages/discover";
+import { stagesFor } from "@/lib/pipeline/stages";
 import type { QlooApi } from "@/lib/qloo/api";
 import type { Candidate } from "@/lib/qloo/resolve";
 import { markStage, setRunStatus } from "@/lib/runs/stages";
 import { EXAMPLE_BRIEF } from "./example-brief";
+import { ensureExampleProfile } from "./example-research";
 
 export const SHOWCASE_ORG = { name: "Common Ground showcase", slug: "showcase" };
 
@@ -96,18 +98,18 @@ export type ShowcaseDeps = { qlooFor: (campaignId: string, runId: string) => Qlo
 export const SHOWCASE_REMOVED_REFERENCE = "Khruangbin";
 
 /** Run every stage of a new run for the revision, inline; choices at "Which did you mean?" come from SHOWCASE_CHOICES. */
-async function researchInline(db: Db, deps: ShowcaseDeps, campaignId: string, revisionId: string) {
+async function researchInline(db: Db, deps: ShowcaseDeps, campaignId: string, revisionId: string, mode: "qloo" | "baseline" = "qloo") {
   const log = deps.log ?? (() => undefined);
-  const [done] = await db.select({ id: run.id }).from(run).where(and(eq(run.revisionId, revisionId), eq(run.status, "done"))).limit(1);
+  const [done] = await db.select({ id: run.id }).from(run).where(and(eq(run.revisionId, revisionId), eq(run.mode, mode), eq(run.status, "done"))).limit(1);
   if (done) return false;
 
   // A previous attempt that died mid-run would block a new one (one active run per revision).
   // Its reference resolution belongs to the revision and is reused.
-  await db.update(run).set({ status: "error" }).where(and(eq(run.revisionId, revisionId), eq(run.status, "running")));
-  const [r] = await db.insert(run).values({ revisionId, status: "running" }).returning({ id: run.id });
-  const ctx = { db, runId: r.id, qloo: deps.qlooFor(campaignId, r.id), llm: deps.llm };
+  await db.update(run).set({ status: "error" }).where(and(eq(run.revisionId, revisionId), eq(run.mode, mode), eq(run.status, "running")));
+  const [r] = await db.insert(run).values({ revisionId, mode, status: "running" }).returning({ id: run.id });
+  const ctx = { db, runId: r.id, qloo: deps.qlooFor(campaignId, r.id), llm: deps.llm, mode };
   try {
-    for (const stage of STAGES) {
+    for (const stage of stagesFor(mode)) {
       const started = Date.now();
       await markStage(r.id, stage.position, stage.name, "running");
       const output = await stage.run(ctx);
@@ -130,15 +132,22 @@ async function researchInline(db: Db, deps: ShowcaseDeps, campaignId: string, re
 }
 
 /**
- * Idempotent: researches revision 1 (the example brief), then revision 2 (the same brief with
+ * Idempotent: researches revision 1 (the example brief) with Qloo and as a baseline without it (the
+ * Evaluate view), then revision 2 (the same brief with
  * SHOWCASE_REMOVED_REFERENCE removed) for the revision compare. Each step is skipped once done.
  * The campaign keeps revision 1 as its current revision.
  */
 export async function seedShowcase(db: Db, deps: ShowcaseDeps): Promise<{ campaignId: string; status: "exists" | "created" }> {
   const log = deps.log ?? (() => undefined);
   const { campaignId, revisionId } = await showcaseRevision(db);
+  const [owner] = await db.select({ organizationId: campaign.organizationId }).from(campaign).where(eq(campaign.id, campaignId));
+  if (await ensureExampleProfile(db, owner.organizationId)) log("  example brand profile added");
   let created = await researchInline(db, deps, campaignId, revisionId);
   await db.update(campaign).set({ status: "reviewing_proposals", currentRevisionId: revisionId }).where(eq(campaign.id, campaignId));
+  if (await researchInline(db, deps, campaignId, revisionId, "baseline")) {
+    log("  baseline (without Qloo) for the Evaluate view");
+    created = true;
+  }
 
   const [child] = await db.select({ id: campaignRevision.id }).from(campaignRevision).where(eq(campaignRevision.parentRevisionId, revisionId)).limit(1);
   let childId = child?.id;
@@ -155,5 +164,46 @@ export async function seedShowcase(db: Db, deps: ShowcaseDeps): Promise<{ campai
     log(`  revision 2: removed "${SHOWCASE_REMOVED_REFERENCE}"`);
   }
   created = (await researchInline(db, deps, campaignId, childId)) || created;
+  created = (await backfillStages(db, deps, campaignId)) || created;
   return { campaignId, status: created ? "created" : "exists" };
+}
+
+/**
+ * Showcase runs researched before a stage existed get that stage added, if it only reads what those
+ * runs already hold. Today that is "Finding real creators" (stage 10), which needs only the directions;
+ * it is also re-run when its stored output came from an older version of its query.
+ */
+async function backfillStages(db: Db, deps: ShowcaseDeps, campaignId: string) {
+  const log = deps.log ?? (() => undefined);
+  const runs = await db
+    .select({ id: run.id })
+    .from(run)
+    .innerJoin(campaignRevision, eq(run.revisionId, campaignRevision.id))
+    .where(and(eq(campaignRevision.campaignId, campaignId), eq(run.mode, "qloo"), eq(run.status, "done")));
+  let changed = false;
+  for (const r of runs) {
+    // "Checking against what you know" (stage 11): only needs the directions and the brand profile.
+    const [fit] = await db.select({ output: runStage.output }).from(runStage).where(and(eq(runStage.runId, r.id), eq(runStage.position, 11), eq(runStage.status, "done")));
+    if (!fit || !(fit.output as { checked?: boolean } | null)?.checked) {
+      const stage = stagesFor("qloo").find((s) => s.position === 11)!;
+      await markStage(r.id, stage.position, stage.name, "running");
+      const output = await stage.run({ db, runId: r.id, qloo: deps.qlooFor(campaignId, r.id), llm: deps.llm, mode: "qloo" });
+      await markStage(r.id, stage.position, stage.name, "done", { output });
+      log(`  backfilled ${stage.name} on run ${r.id}`);
+      changed = true;
+    }
+    const [has] = await db.select({ output: runStage.output }).from(runStage).where(and(eq(runStage.runId, r.id), eq(runStage.position, 10), eq(runStage.status, "done")));
+    // Also recompute results stored by an older version of the query.
+    if (has && (has.output as { method?: number } | null)?.method === DISCOVERY_METHOD) {
+      log(`  ${r.id}: real creators up to date`);
+      continue;
+    }
+    const stage = stagesFor("qloo").find((s) => s.position === 10)!;
+    await markStage(r.id, stage.position, stage.name, "running");
+    const output = await stage.run({ db, runId: r.id, qloo: deps.qlooFor(campaignId, r.id), llm: deps.llm, mode: "qloo" });
+    await markStage(r.id, stage.position, stage.name, "done", { output });
+    log(`  backfilled ${stage.name} on run ${r.id}`);
+    changed = true;
+  }
+  return changed;
 }

@@ -1,11 +1,9 @@
-// Server startup hook (Next.js instrumentation).
-// The Workflow SDK's local backend re-enqueues unfinished runs only when its World is started,
-// so a crashed or restarted dev server resumes research runs. On Vercel the managed backend
-// handles recovery itself, and starting it here would only add cold-start time.
+// Server startup hook (Next.js instrumentation). Node.js-only work lives in instrumentation-node.ts,
+// imported conditionally as the Next.js docs recommend, so the Edge build never sees it.
 
 export async function register() {
-  if (process.env.NEXT_RUNTIME !== "nodejs" || process.env.VERCEL) return;
-  const { getWorld } = await import("workflow/runtime");
-  const world = await getWorld();
-  await world.start?.();
+  if (process.env.NEXT_RUNTIME === "nodejs") {
+    const { startNode } = await import("./instrumentation-node");
+    await startNode();
+  }
 }

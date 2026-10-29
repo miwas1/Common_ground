@@ -1,4 +1,4 @@
-import { count, eq } from "drizzle-orm";
+import { and, count, eq, ne } from "drizzle-orm";
 import Link from "next/link";
 import { Suspense, type ReactNode } from "react";
 import { AppShell } from "@/components/app-shell";
@@ -11,8 +11,8 @@ import { campaignRevision, proposal } from "@/db/schema";
 import { pageAuthorize } from "@/lib/auth/page";
 import { formatMoney } from "@/lib/pipeline/money";
 import { getCampaignHeader } from "@/lib/views/campaign";
+import { CAMPAIGN_TYPE_LABEL } from "@/lib/views/labels";
 
-const TYPE_LABEL: Record<string, string> = { ugc_production: "Paid UGC", creator_distribution: "Creator distribution", hybrid: "Hybrid" };
 const MARKET_LABEL: Record<string, string> = { US: "US", GB: "UK", DE: "Germany" };
 
 async function Header({ params }: { params: Promise<{ id: string }> }) {
@@ -20,7 +20,8 @@ async function Header({ params }: { params: Promise<{ id: string }> }) {
   await pageAuthorize({ type: "campaign.read", campaignId: id });
   const { campaign, revision, run } = await getCampaignHeader(id);
   const db = await getDb();
-  const [{ n }] = run ? await db.select({ n: count() }).from(proposal).where(eq(proposal.runId, run.id)) : [{ n: 0 }];
+  // Proposals set aside by a creator swap no longer count.
+  const [{ n }] = run ? await db.select({ n: count() }).from(proposal).where(and(eq(proposal.runId, run.id), ne(proposal.status, "set_aside"))) : [{ n: 0 }];
   const revisions = await db.$count(campaignRevision, eq(campaignRevision.campaignId, id));
   return (
     <div className="grid gap-4">
@@ -30,20 +31,20 @@ async function Header({ params }: { params: Promise<{ id: string }> }) {
           <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             <span>{revision.markets.map((m) => MARKET_LABEL[m] ?? m).join(" · ")}</span>
             <span aria-hidden>·</span>
-            <span>{TYPE_LABEL[revision.campaignType]}</span>
+            <span>{CAMPAIGN_TYPE_LABEL[revision.campaignType]}</span>
             {revision.budgetCents ? (
               <>
                 <span aria-hidden>·</span>
-                <span>{formatMoney(revision.budgetCents, revision.currency)} production budget</span>
+                <span>{formatMoney(revision.budgetCents, revision.currency)} budget</span>
               </>
             ) : null}
-            <Badge variant="outline">Revision {revision.number}</Badge>
-            {campaign.isShowcase && <Badge variant="secondary">Showcase · read-only</Badge>}
+            {revision.number > 1 && <Badge variant="outline">Version {revision.number}</Badge>}
+            {campaign.isShowcase && <Badge variant="secondary">Example · view only</Badge>}
           </p>
         )}
         {revision?.changeNote && revision.parentRevisionId && (
           <p className="mt-1 text-sm">
-            <span className="text-muted-foreground">Changed from revision {revision.number - 1}:</span> {revision.changeNote}.{" "}
+            <span className="text-muted-foreground">Changed from version {revision.number - 1}:</span> {revision.changeNote}.{" "}
             <Link href={`/brand/campaigns/${id}/revisions`} className="font-medium text-primary underline-offset-4 hover:underline">Compare</Link>
           </p>
         )}

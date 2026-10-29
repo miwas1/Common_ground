@@ -24,7 +24,7 @@ import { diffNames, matchDirections } from "@/lib/campaigns/compare";
 export async function listRevisions(campaignId: string) {
   const db = await getDb();
   const revs = await db.select().from(campaignRevision).where(eq(campaignRevision.campaignId, campaignId)).orderBy(desc(campaignRevision.number));
-  const runs = revs.length ? await db.select().from(run).where(inArray(run.revisionId, revs.map((r) => r.id))).orderBy(desc(run.createdAt)) : [];
+  const runs = revs.length ? await db.select().from(run).where(and(inArray(run.revisionId, revs.map((r) => r.id)), eq(run.mode, "qloo"))).orderBy(desc(run.createdAt)) : [];
   return revs.map((r) => ({ revision: r, run: runs.find((x) => x.revisionId === r.id) ?? null }));
 }
 
@@ -45,7 +45,7 @@ async function revisionSummary(revisionId: string) {
   const [r] = await db
     .select()
     .from(run)
-    .where(and(eq(run.revisionId, revisionId), eq(run.status, "done")))
+    .where(and(eq(run.revisionId, revisionId), eq(run.status, "done"), eq(run.mode, "qloo")))
     .orderBy(desc(run.createdAt))
     .limit(1);
   const refs = await db

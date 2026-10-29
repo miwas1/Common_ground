@@ -3,7 +3,8 @@
 import { z } from "zod";
 import { checkClaims, type Issue } from "@/lib/claims/validate";
 import { objectWithValidation } from "@/lib/llm";
-import { loadRun, type StageCtx } from "../context";
+import { loadRun, optionalStageOutput, type StageCtx } from "../context";
+import type { UnderstandOutput } from "./understand";
 
 /** A failure retrying will not fix (bad input, model refusal); the run stops with this message. */
 export class StageInputError extends Error {
@@ -42,11 +43,21 @@ export type ParsedBrief = z.infer<typeof ParsedBrief>;
 
 const SYSTEM = `You turn a brand's campaign brief into structured fields for a creative strategy tool.
 Extract only what the brief states or clearly implies; never invent customer research.
-For references, list public cultural entities a taste graph could know — the brand's competitors and peers, artists, TV shows, films, podcasts, books — plus short interest phrases (e.g. "home cooking", "urban cycling") and audience segments (e.g. "coffee"). Use each entity's canonical public name. Do not include the brand itself; it is added separately.`;
+For references, list public cultural entities a taste graph could know — the brand's competitors and peers, artists, TV shows, films, podcasts, books — plus short interest phrases (e.g. "home cooking", "urban cycling") and audience segments (e.g. "coffee"). Use each entity's canonical public name. Do not include the brand itself; it is added separately.
+Write interest phrases as the everyday name of a hobby or lifestyle a catalogue would list ("Investing", "Cryptocurrency", "Home Cooking"), not shorthand or jargon. Peer brands from the understanding are good brand references when they fit the product.`;
 
 export async function parseBrief(ctx: StageCtx) {
   const { brief, inputs, revision } = await loadRun(ctx.db, ctx.runId);
   const inputLines = inputs.map((i, n) => `[${n}] (${i.source}) ${i.text}`).join("\n") || "(none provided)";
+  const understood = await optionalStageOutput<UnderstandOutput>(ctx.db, ctx.runId, 0);
+  const understanding = understood
+    ? `<understanding>
+${understood.summary}
+Terms: ${understood.terms.map((t) => `${t.term} = ${t.meaning}`).join("; ") || "none"}
+Peer brands: ${understood.peers.join(", ") || "none found"}
+</understanding>
+`
+    : "";
 
   const prompt = `<brief>
 Brand: ${brief.brandName}
@@ -62,11 +73,11 @@ Team notes: ${brief.notes || "none"}
 <audience_inputs>
 ${inputLines}
 </audience_inputs>
-Return the structured brief. Keep references to the ones the brief supports (at most 10).`;
+${understanding}Return the structured brief. Keep references to the ones the brief supports (at most 10).`;
 
   const parsed = await objectWithValidation(
     ctx.llm,
-    { name: "parse brief", system: SYSTEM, prompt, schema: ParsedBrief, effort: "low", tier: "fast" },
+    { name: "parse brief", system: SYSTEM, prompt, schema: ParsedBrief, effort: "low" },
     (v) => {
       const issues: Issue[] = [];
       if (v.references.length > 10) issues.push({ path: "references", message: "at most 10 references" });

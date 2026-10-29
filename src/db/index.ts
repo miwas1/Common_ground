@@ -37,9 +37,11 @@ async function connectPglite(dataDir: string): Promise<Db> {
 }
 
 // Kept on globalThis so dev hot reloads reuse one PGlite instance per data directory.
-const globalForDb = globalThis as unknown as { __commonGroundDb?: Promise<Db> };
+const globalForDb = globalThis as unknown as { __commonGroundDb?: Promise<Db>; __commonGroundDbClosed?: boolean };
 
 export function getDb(): Promise<Db> {
+  // Reopening PGlite in a process that closed it aborts mid-recovery and can corrupt .pglite.
+  if (globalForDb.__commonGroundDbClosed) return Promise.reject(new Error("The local database was closed for shutdown. Restart the server."));
   if (!globalForDb.__commonGroundDb) {
     const url = process.env.DATABASE_URL;
     if (!url && process.env.VERCEL) {
@@ -53,6 +55,20 @@ export function getDb(): Promise<Db> {
     });
   }
   return globalForDb.__commonGroundDb;
+}
+
+/**
+ * Close the shared local database cleanly at shutdown (PGlite writes a shutdown checkpoint). Stopping
+ * the dev server without this can leave PGlite's write-ahead log half-written and the data unreadable.
+ * The process must exit afterwards: the database is not reopened.
+ */
+export async function closeLocalDb() {
+  const pending = globalForDb.__commonGroundDb;
+  if (!pending || process.env.DATABASE_URL) return;
+  globalForDb.__commonGroundDbClosed = true;
+  globalForDb.__commonGroundDb = undefined;
+  const db = (await pending.catch(() => null)) as (Db & { $client?: { close?: () => Promise<void> } }) | null;
+  await db?.$client?.close?.();
 }
 
 /** Open an isolated database (tests). Not shared through the global singleton. */

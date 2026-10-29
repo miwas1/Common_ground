@@ -31,6 +31,12 @@ export type QlooEntity = {
   affinity?: number;
   attribution?: Attribution[];
   tags: QlooTagRef[];
+  /** people only: public social handles Qloo links to the person (without "@"). */
+  handles?: { instagram?: string; twitter?: string };
+  /** people only: occupations, e.g. "youtuber", "pastry_chef" (urn:tag:occupation:person:*). */
+  occupations?: string[];
+  /** people only: Qloo records a date of death. */
+  deceased?: boolean;
   /** places only */
   place?: {
     address?: string;

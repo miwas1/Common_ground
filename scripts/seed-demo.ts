@@ -19,9 +19,11 @@ async function main() {
   const { QlooClient } = await import("@/lib/qloo/client");
   const { DbCache, recordCall } = await import("@/lib/qloo/db-cache");
 
+  const { ensureExampleProfile } = await import("@/lib/demo/example-research");
   const db = await getDb();
   for (const s of await seedDemoIdentities(db, createAuth(db), password)) {
     console.log(`${s.role.padEnd(8)} ${s.created ? "created" : "exists "}  user=${s.userId}  org=${s.organizationId}`);
+    if (s.role === "brand" && (await ensureExampleProfile(db, s.organizationId))) console.log("         example brand profile added");
   }
 
   const api = new QlooApi(
@@ -40,10 +42,13 @@ async function main() {
   }
 }
 
+// Close PGlite before exiting: leaving it open can corrupt .pglite (a no-op with Neon).
+const closeDb = () => import("@/db").then(({ closeLocalDb }) => closeLocalDb());
+
 main().then(
-  () => process.exit(0),
+  () => closeDb().finally(() => process.exit(0)),
   (err) => {
     console.error(err);
-    process.exit(1);
+    closeDb().finally(() => process.exit(1));
   },
 );

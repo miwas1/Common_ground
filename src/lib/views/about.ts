@@ -5,6 +5,7 @@ import "server-only";
 // Everything shown is derived at request time from the private database; no Qloo data is in the repo.
 
 import { and, asc, eq, isNotNull } from "drizzle-orm";
+import { connection } from "next/server";
 import { getDb } from "@/db";
 import { campaign, claim, claimBinding, direction, evidence, qlooCall, resolvedReference, run } from "@/db/schema";
 import { findShowcase } from "@/lib/demo/showcase";
@@ -19,6 +20,8 @@ export type CallKind =
   | "recommend"
   | "places"
   | "score_entities"
+  | "creators"
+  | "handles"
   | "other";
 
 /** Which Qloo capability a stored call used, from its endpoint and parameters. */
@@ -26,23 +29,27 @@ export function callKind(endpoint: string, params: Record<string, string>): Call
   if (endpoint === "/search") return "search";
   if (endpoint === "/v2/tags") return "tags";
   if (endpoint === "/v2/audiences") return "audiences";
+  if (endpoint === "/entities") return params["external.instagram.ids"] ? "handles" : "other";
   if (endpoint !== "/v2/insights") return "other";
   const type = params["filter.type"];
   if (type === "urn:tag") return params["filter.results.tags"] ? "score_tags" : "taste";
   if (type === "urn:demographics") return "demographics";
   if (params["filter.results.entities"]) return "score_entities";
   if (params["filter.location.query"]) return "places";
+  if (type === "urn:entity:person") return "creators";
   return type?.startsWith("urn:entity:") ? "recommend" : "other";
 }
 
 async function showcaseRun() {
+  // Read at request time: the showcase changes whenever it is re-seeded, and the page shell stays prerendered.
+  await connection();
   const db = await getDb();
   const showcase = await findShowcase(db);
   if (!showcase?.currentRevisionId) return null;
   const [r] = await db
     .select({ id: run.id, revisionId: run.revisionId })
     .from(run)
-    .where(and(eq(run.revisionId, showcase.currentRevisionId), eq(run.status, "done")))
+    .where(and(eq(run.revisionId, showcase.currentRevisionId), eq(run.status, "done"), eq(run.mode, "qloo")))
     .limit(1);
   return r ? { ...r, campaignId: showcase.id } : null;
 }

@@ -54,6 +54,18 @@ export async function attachInterpretation(db: Db, runId: string, owner: ClaimOw
   return c.id;
 }
 
+/**
+ * A baseline run's interpretation (the Evaluate comparison). It rests on the brief alone, which has no
+ * evidence rows to bind to, so it has no bindings; the brief statements it cites are kept in `basis`.
+ */
+export async function attachBriefInterpretation(db: Db, runId: string, owner: ClaimOwner, text: string, basis: string[]) {
+  const [c] = await db
+    .insert(claim)
+    .values({ runId, ownerType: owner.type, ownerId: owner.id, kind: "interpretation", text, createdBy: "model", basis })
+    .returning({ id: claim.id });
+  return c.id;
+}
+
 /** A statement about a creator's work, bound to the portfolio pieces that show it. */
 export async function attachPortfolioClaim(db: Db, runId: string, owner: ClaimOwner, text: string, portfolioItemIds: string[]) {
   if (portfolioItemIds.length === 0) throw new Error("A portfolio claim must cite at least one portfolio item");

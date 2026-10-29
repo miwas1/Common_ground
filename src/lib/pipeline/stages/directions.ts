@@ -5,10 +5,10 @@ import { and, asc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { claim, direction, evidence } from "@/db/schema";
 import { renderFinding } from "@/lib/claims/findings";
-import { attachFindings, attachInterpretation, toFindingInput } from "@/lib/claims/persist";
+import { attachBriefInterpretation, attachFindings, attachInterpretation, toFindingInput } from "@/lib/claims/persist";
 import { checkClaims, checkInterpretation, checkKeys, PROSE_RULES, type Issue } from "@/lib/claims/validate";
 import { objectWithValidation } from "@/lib/llm";
-import { loadRun, stageOutput, type StageCtx } from "../context";
+import { briefStatements, loadRun, stageOutput, type StageCtx } from "../context";
 import { StageInputError, type ParsedBrief } from "./brief";
 
 const DirectionsSchema = z.object({
@@ -34,6 +34,15 @@ Rules:
 - Cite evidence only by its key (E1, E2, …). Never restate numbers, ranks or affinities; the product shows the findings themselves.
 - Interpretations, audience context and product role are hedged readings ("could", "suggests"), without numbers, rankings or superlatives, and never predict purchasing, conversion or performance.
 - Qloo describes aggregate affinities, not individuals.
+- Directions must be genuinely different worlds, not variations of one idea.
+${PROSE_RULES}`;
+
+/** The baseline's instructions: identical apart from the source of what it may cite. */
+const BASELINE_SYSTEM = `You are a senior creative strategist. You develop campaign directions a brand could test with creators, using the brief and your general cultural knowledge.
+Rules:
+- Cite the brief only by its key (B1, B2, …); "anchors" and interpretation "evidence" list the brief statements each direction rests on.
+- Interpretations, audience context and product role are hedged readings ("could", "suggests"), without numbers, rankings or superlatives, and never predict purchasing, conversion or performance.
+- Describe audiences in aggregate, never as individuals.
 - Directions must be genuinely different worlds, not variations of one idea.
 ${PROSE_RULES}`;
 
@@ -76,7 +85,29 @@ export function validateDirections(v: Directions, pool: Map<string, { kind: stri
   return issues;
 }
 
+/** Baseline directions: the same content rules; citations must be brief statements. */
+export function validateBaselineDirections(v: Directions, statements: ReadonlySet<string>): Issue[] {
+  const issues: Issue[] = [];
+  if (v.directions.length < 3 || v.directions.length > 4) issues.push({ path: "directions", message: "return 3 or 4 directions" });
+  v.directions.forEach((d, i) => {
+    const p = `directions[${i}]`;
+    issues.push(...checkKeys(d.anchors, statements, `${p}.anchors`));
+    if (d.interpretations.length < 2 || d.interpretations.length > 4) issues.push({ path: `${p}.interpretations`, message: "give 2–4 interpretations" });
+    d.interpretations.forEach((it, j) => {
+      issues.push(...checkKeys(it.evidence, statements, `${p}.interpretations[${j}].evidence`));
+      issues.push(...checkInterpretation(it.text, `${p}.interpretations[${j}].text`));
+    });
+    issues.push(...checkInterpretation(d.audienceContext, `${p}.audienceContext`));
+    issues.push(...checkInterpretation(d.productRole, `${p}.productRole`));
+    issues.push(...checkClaims(d.title, `${p}.title`));
+    [...d.sceneIdeas, ...d.assumptions].forEach((t, j) => issues.push(...checkClaims(t, `${p}.copy[${j}]`)));
+  });
+  return issues;
+}
+
 export async function synthesizeDirections(ctx: StageCtx) {
+  if (ctx.mode === "baseline") return synthesizeBaselineDirections(ctx);
+
   const { brief, inputs, revision } = await loadRun(ctx.db, ctx.runId);
   const parsed = await stageOutput<ParsedBrief>(ctx.db, ctx.runId, 1);
 
@@ -130,6 +161,55 @@ Propose 3 or 4 distinct cultural directions for creator-made campaign content.`;
     for (const it of d.interpretations) {
       const findingIds = it.evidence.map((k) => findingByEvidence.get(pool.get(k)!.id)!);
       await attachInterpretation(ctx.db, ctx.runId, owner, it.text, findingIds);
+    }
+    created.push({ id: row.id, title: d.title });
+  }
+  return { directions: created };
+}
+
+async function synthesizeBaselineDirections(ctx: StageCtx) {
+  const run = await loadRun(ctx.db, ctx.runId);
+  const { brief, inputs, revision } = run;
+  const parsed = await stageOutput<ParsedBrief>(ctx.db, ctx.runId, 1);
+
+  await ctx.db.delete(claim).where(and(eq(claim.runId, ctx.runId), eq(claim.ownerType, "direction")));
+  await ctx.db.delete(direction).where(eq(direction.runId, ctx.runId));
+
+  const statements = briefStatements(run);
+  const prompt = `<campaign>
+Brand: ${brief.brandName}; product: ${brief.product.name} (${parsed.productCategory}) — ${brief.product.description}
+Objective: ${parsed.objectiveSummary}
+Markets: ${revision.markets.join(", ")}; type: ${revision.campaignType}
+Audience inputs (with source): ${inputs.map((i) => `(${i.source}) ${i.text}`).join("; ") || "none"}
+Intended audience: ${parsed.intendedAudience.summary}
+</campaign>
+<brief_statements>
+${[...statements].map(([k, text]) => `${k} ${text}`).join("\n")}
+</brief_statements>
+Propose 3 or 4 distinct cultural directions for creator-made campaign content.`;
+
+  const out = await objectWithValidation(
+    ctx.llm,
+    { name: "synthesize directions (baseline)", system: BASELINE_SYSTEM, prompt, schema: DirectionsSchema, effort: "high" },
+    (v) => validateBaselineDirections(v, new Set(statements.keys())),
+  );
+
+  const created: { id: string; title: string }[] = [];
+  for (const [i, d] of out.directions.entries()) {
+    const [row] = await ctx.db
+      .insert(direction)
+      .values({
+        runId: ctx.runId,
+        title: d.title,
+        audienceContext: d.audienceContext,
+        productRole: d.productRole,
+        artDirection: { ...d.artDirection, sceneIdeas: d.sceneIdeas },
+        assumptions: d.assumptions,
+        colorIndex: i + 1,
+      })
+      .returning({ id: direction.id });
+    for (const it of d.interpretations) {
+      await attachBriefInterpretation(ctx.db, ctx.runId, { type: "direction", id: row.id }, it.text, it.evidence.map((k) => statements.get(k)!));
     }
     created.push({ id: row.id, title: d.title });
   }

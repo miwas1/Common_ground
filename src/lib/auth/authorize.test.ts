@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { openPglite, type Db } from "@/db";
-import { creator, direction, offer, proposal, proposalVersion, run } from "@/db/schema";
+import { brandCreator, creator, direction, offer, proposal, proposalVersion, run } from "@/db/schema";
 import { createCampaign, createOrg, createUser } from "@/test/fixtures";
 import { authorize, AuthorizationError, type Action } from "./authorize";
 
@@ -128,6 +128,24 @@ describe("authorize", { timeout: 30_000 }, () => {
       expect((await as("maya", { type: "creator.write", creatorId: px.creatorId })).actingOrganizationId).toBe(org.maya);
       await denied("alex", { type: "creator.write", creatorId: px.creatorId }, "not_found");
       await denied("dev", { type: "creator.write", creatorId: px.creatorId }, "not_found");
+    });
+  });
+
+  describe("rosters", () => {
+    it("lets brand members manage their own roster only", async () => {
+      expect((await as("sam", { type: "roster.manage", organizationId: org.juniper })).actingOrganizationId).toBe(org.juniper);
+      await denied("blake", { type: "roster.manage", organizationId: org.juniper }, "not_found");
+      await denied("maya", { type: "roster.manage", organizationId: org.maya }, "forbidden");
+    });
+
+    it("lets a brand change creators it added or shared demo creators, never another brand's", async () => {
+      const [mine] = await db.insert(creator).values({ organizationId: org.juniper, displayName: "Added by Juniper", city: "", country: "" }).returning();
+      await db.insert(brandCreator).values({ brandOrganizationId: org.juniper, creatorId: mine.id, source: "manual" });
+      const [demo] = await db.insert(creator).values({ organizationId: org.dev, isDemo: true, displayName: "Demo", city: "Austin", country: "US" }).returning();
+      await as("alex", { type: "roster.creator", organizationId: org.juniper, creatorId: mine.id });
+      await as("alex", { type: "roster.creator", organizationId: org.juniper, creatorId: demo.id });
+      await denied("blake", { type: "roster.creator", organizationId: org.otherBrand, creatorId: mine.id }, "not_found");
+      await denied("alex", { type: "roster.creator", organizationId: org.juniper, creatorId: px.creatorId }, "not_found");
     });
   });
 });

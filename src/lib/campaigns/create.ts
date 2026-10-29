@@ -3,10 +3,10 @@ import "server-only";
 // Creating a campaign from the brief form: one revision, its audience inputs, and a research run.
 // Shared by the form's server action and the development-only API route.
 
-import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { member } from "@/db/auth-schema";
-import { briefInput, campaign, campaignRevision, orgProfile } from "@/db/schema";
+import { briefInput, campaign, campaignRevision } from "@/db/schema";
+import { actingBrandOrg } from "@/lib/auth/brand";
+import { approvedFacts } from "@/lib/brand/profile";
 import type { Actor } from "@/lib/auth/authorize";
 import type { BriefForm } from "@/lib/pipeline/context";
 import { startResearch } from "@/lib/pipeline/start";
@@ -16,23 +16,12 @@ const str = (form: FormData, key: string) => String(form.get(key) ?? "").trim();
 /** A problem with the brief the user can fix; its message is shown beside the form. */
 export class BriefError extends Error {}
 
-/** The brand organization the actor is working in: their active org if it is a brand they belong to. */
-async function actingBrandOrg(userId: string, activeOrganizationId: string | null) {
-  const db = await getDb();
-  const orgs = await db
-    .select({ id: member.organizationId, kind: orgProfile.kind })
-    .from(member)
-    .innerJoin(orgProfile, eq(orgProfile.organizationId, member.organizationId))
-    .where(and(eq(member.userId, userId), eq(orgProfile.kind, "brand")));
-  return orgs.find((o) => o.id === activeOrganizationId)?.id ?? orgs[0]?.id ?? null;
-}
-
 const MARKETS = ["US", "GB", "DE"];
 const LANGUAGE_FOR: Record<string, string> = { US: "en", GB: "en", DE: "de" };
 
 export async function createCampaignFromForm(actor: Actor & { activeOrganizationId: string | null }, form: FormData) {
   const organizationId = await actingBrandOrg(actor.userId, actor.activeOrganizationId);
-  if (!organizationId) throw new BriefError("Join or create a brand organization first.");
+  if (!organizationId) throw new BriefError("Your account needs a brand workspace first.");
   const markets = MARKETS.filter((m) => form.get(`market_${m}`) === "on");
   if (markets.length === 0) throw new BriefError("Choose at least one market.");
   const brief: BriefForm = {
@@ -50,6 +39,17 @@ export async function createCampaignFromForm(actor: Actor & { activeOrganization
     .filter((a) => a.text && ["research", "team", "assumption"].includes(a.source)) as { text: string; source: "research" | "team" | "assumption" }[];
 
   const db = await getDb();
+  // Statements ticked from the brand profile: only this brand's approved ones count.
+  const picked = form.getAll("profile_fact").map(String);
+  const facts = picked.length ? (await approvedFacts(db, organizationId)).filter((f) => picked.includes(f.id)) : [];
+  const rules = facts.filter((f) => f.kind === "avoid" || f.kind === "approved_claim");
+  if (rules.length) {
+    brief.constraints = [brief.constraints, ...rules.map((f) => (f.kind === "avoid" ? f.text : `Approved claim: ${f.text}`))].filter(Boolean).join("; ");
+  }
+  const fromProfile = facts
+    .filter((f) => f.kind === "research" || f.kind === "measured" || f.kind === "belief")
+    .map((f) => ({ text: f.text, source: (f.kind === "belief" ? "team" : "research") as "research" | "team", brandFactId: f.id }));
+
   const [c] = await db.insert(campaign).values({ name: str(form, "name") || `${brief.product.name} campaign`, organizationId }).returning({ id: campaign.id });
   const [rev] = await db
     .insert(campaignRevision)
@@ -65,7 +65,8 @@ export async function createCampaignFromForm(actor: Actor & { activeOrganization
       createdBy: actor.userId,
     })
     .returning({ id: campaignRevision.id });
-  if (audience.length) await db.insert(briefInput).values(audience.map((a) => ({ revisionId: rev.id, text: a.text, source: a.source })));
+  const inputs: { text: string; source: "research" | "team" | "assumption"; brandFactId?: string }[] = [...audience, ...fromProfile];
+  if (inputs.length) await db.insert(briefInput).values(inputs.map((a) => ({ revisionId: rev.id, text: a.text, source: a.source, brandFactId: a.brandFactId ?? null })));
   await startResearch(rev.id, c.id);
   return c.id;
 }

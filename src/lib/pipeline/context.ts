@@ -23,6 +23,8 @@ export type StageCtx = {
   qloo: QlooApi;
   llm: Llm;
   runId: string;
+  /** "baseline" runs the same pipeline with every Qloo stage left out (the Evaluate comparison). */
+  mode?: "qloo" | "baseline";
 };
 
 export async function loadRun(db: Db, runId: string) {
@@ -39,6 +41,16 @@ export async function loadRun(db: Db, runId: string) {
 }
 
 export type LoadedRun = Awaited<ReturnType<typeof loadRun>>;
+
+/** What a baseline run may cite instead of Qloo findings: the brief's own statements (B keys). */
+export function briefStatements(run: Pick<LoadedRun, "brief" | "inputs">) {
+  const lines = [
+    `Objective: ${run.brief.objective}`,
+    ...(run.brief.notes ? [`Team notes: ${run.brief.notes}`] : []),
+    ...run.inputs.map((i) => `Audience input (${i.source}): ${i.text}`),
+  ];
+  return new Map(lines.map((text, i) => [`B${i + 1}`, text]));
+}
 
 /** Confirmed Qloo references for the run's revision, split by kind. */
 export async function confirmedSignals(db: Db, revisionId: string) {
@@ -66,4 +78,9 @@ export async function stageOutput<T>(db: Db, runId: string, position: number): P
     .limit(1);
   if (!row?.output) throw new Error(`Stage ${position} has no output for run ${runId}`);
   return row.output as T;
+}
+
+/** Output of a previous stage that may not have run (runs started before the stage existed). */
+export async function optionalStageOutput<T>(db: Db, runId: string, position: number): Promise<T | null> {
+  return stageOutput<T>(db, runId, position).catch(() => null);
 }

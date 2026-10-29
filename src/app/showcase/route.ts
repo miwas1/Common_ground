@@ -8,7 +8,9 @@ import { findShowcase } from "@/lib/demo/showcase";
 
 // One link to the finished showcase campaign. Visitors without a session enter as the demo brand,
 // so judges and readers of the README land on a complete result with no sign-in step.
-export async function GET() {
+// `?to=evaluate` opens its with/without-Qloo comparison instead.
+export async function GET(request: Request) {
+  const to = new URL(request.url).searchParams.get("to") === "evaluate" ? "/evaluate" : "";
   if (!(await getActor())) {
     const password = process.env.DEMO_PASSWORD;
     if (!password) redirect("/sign-in");
@@ -16,5 +18,5 @@ export async function GET() {
     await auth.api.signInEmail({ body: { email: DEMO_ACCOUNTS.brand.user.email, password }, headers: await headers() });
   }
   const showcase = await findShowcase(await getDb());
-  redirect(showcase ? `/brand/campaigns/${showcase.id}` : "/brand");
+  redirect(showcase ? `/brand/campaigns/${showcase.id}${to}` : "/brand");
 }

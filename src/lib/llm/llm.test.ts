@@ -1,16 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { objectWithValidation, resolveModel, type Llm, type ObjectRequest } from "./index";
+import { MODEL, objectWithValidation, type Llm, type ObjectRequest } from "./index";
 
-describe("model allowlist", () => {
-  it("defaults to Sonnet 5.5 for standard steps and Haiku 5.5 for fast ones", () => {
-    expect(resolveModel("standard", undefined)).toBe("claude-sonnet-5-5");
-    expect(resolveModel("fast", "")).toBe("claude-haiku-5-5");
-  });
-
-  it("rejects any other model", () => {
-    expect(() => resolveModel("standard", "claude-opus-5-5")).toThrow(/not allowed/);
-    expect(() => resolveModel("fast", "claude-sonnet-5")).toThrow(/not allowed/);
+describe("model", () => {
+  it("is Haiku 5.5 for every step", () => {
+    expect(MODEL).toBe("claude-haiku-5-5");
   });
 });
 

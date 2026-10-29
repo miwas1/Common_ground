@@ -7,6 +7,7 @@ import { and, eq } from "drizzle-orm";
 import type { Db } from "@/db";
 import { member } from "@/db/auth-schema";
 import {
+  brandCreator,
   campaign,
   campaignRevision,
   creator,
@@ -26,7 +27,13 @@ export type Action =
   | { type: "proposal.revise"; proposalId: string }
   | { type: "offer.send"; proposalVersionId: string }
   | { type: "offer.decide"; offerId: string }
-  | { type: "creator.write"; creatorId: string };
+  | { type: "creator.write"; creatorId: string }
+  /** Manage a brand's creator roster. The organization comes from the actor's membership, never the request. */
+  | { type: "roster.manage"; organizationId: string }
+  /** Change one creator in that roster: one the brand added, or a shared demo creator. */
+  | { type: "roster.creator"; organizationId: string; creatorId: string }
+  /** Read and change a brand's profile (its documents and statements). Organization from membership. */
+  | { type: "profile.manage"; organizationId: string };
 
 export class AuthorizationError extends Error {
   constructor(
@@ -158,6 +165,23 @@ export async function authorize(db: Db, actor: Actor, action: Action): Promise<G
       }
       if (o.status !== "sent") throw forbidden(`This offer is already ${o.status}`);
       return { actingOrganizationId: o.toOrganizationId };
+    }
+
+    case "roster.manage":
+    case "roster.creator":
+    case "profile.manage": {
+      if (!(await isMember(db, actor.userId, action.organizationId))) throw notFound(action.type === "profile.manage" ? "Profile" : "Roster");
+      if ((await orgKind(db, action.organizationId)) !== "brand") throw forbidden("Only brand organizations keep a roster and a profile");
+      if (action.type === "roster.creator") {
+        const [c] = await db.select({ isDemo: creator.isDemo }).from(creator).where(eq(creator.id, action.creatorId)).limit(1);
+        const [link] = await db
+          .select({ creatorId: brandCreator.creatorId })
+          .from(brandCreator)
+          .where(and(eq(brandCreator.brandOrganizationId, action.organizationId), eq(brandCreator.creatorId, action.creatorId)))
+          .limit(1);
+        if (!c || (!link && !c.isDemo)) throw notFound("Creator");
+      }
+      return { actingOrganizationId: action.organizationId };
     }
 
     case "creator.write": {

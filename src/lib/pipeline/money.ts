@@ -14,3 +14,8 @@ export function convertCents(amountCents: number, from: string, to: string): num
 export function formatMoney(amountCents: number, currency: string): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 0 }).format(amountCents / 100);
 }
+
+/** A proposal's price, or "Quote required" when the creator hasn't given one yet. */
+export function formatFee(terms: { amountCents: number | null; currency: string }): string {
+  return terms.amountCents === null || terms.amountCents === undefined ? "Quote required" : formatMoney(terms.amountCents, terms.currency);
+}

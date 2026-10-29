@@ -21,11 +21,11 @@ export async function executeStage(runId: string, position: number) {
     await setRunStatus(runId, "cancelled");
     throw new FatalError("Run cancelled");
   }
-  const { campaign } = await loadRun(db, runId);
+  const { campaign, run } = await loadRun(db, runId);
   await setRunStatus(runId, "running");
   await markStage(runId, position, stage.name, "running");
   try {
-    const output = await stage.run({ db, runId, qloo: qlooFor(campaign.id, runId), llm: anthropicLlm() });
+    const output = await stage.run({ db, runId, qloo: qlooFor(campaign.id, runId), llm: anthropicLlm(), mode: run.mode });
     await markStage(runId, position, stage.name, "done", { output });
     return output;
   } catch (err) {
@@ -38,11 +38,12 @@ export async function executeStage(runId: string, position: number) {
   }
 }
 
-/** A finished run: its campaign moves on to reviewing proposals. */
+/** A finished run: its campaign moves on to reviewing proposals (a baseline run changes nothing else). */
 export async function completeRun(runId: string) {
   const db = await getDb();
   await setRunStatus(runId, "done");
-  const { campaign } = await loadRun(db, runId);
+  const { campaign, run } = await loadRun(db, runId);
+  if (run.mode === "baseline") return;
   await db.update(campaignTable).set({ status: "reviewing_proposals" }).where(eq(campaignTable.id, campaign.id));
 }
 

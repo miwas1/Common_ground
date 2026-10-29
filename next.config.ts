@@ -6,6 +6,10 @@ const nextConfig: NextConfig = {
   // PGlite ships WASM and data files; load it with Node require instead of bundling.
   serverExternalPackages: ["@electric-sql/pglite"],
   partialPrefetching: true,
+  // Brand documents are uploaded through a server action. Vercel caps function bodies at 4.5 MB.
+  experimental: {
+    serverActions: { bodySizeLimit: "4.5mb" },
+  },
   turbopack: {
     rules: {
       "*.css": {

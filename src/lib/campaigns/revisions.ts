@@ -24,9 +24,9 @@ export async function deriveRevision(db: Db, campaignId: string, change: Revisio
   const [active] = await db
     .select({ id: run.id })
     .from(run)
-    .where(and(eq(run.revisionId, current.id), inArray(run.status, [...ACTIVE])))
+    .where(and(eq(run.revisionId, current.id), eq(run.mode, "qloo"), inArray(run.status, [...ACTIVE])))
     .limit(1);
-  if (active) throw new RevisionError("Wait for the current research to finish, or cancel it, before refining.");
+  if (active) throw new RevisionError("Wait for the research to finish, or cancel it, before making a change.");
 
   const inputs = await db.select().from(briefInput).where(eq(briefInput.revisionId, current.id));
   const refs = await db.select().from(resolvedReference).where(eq(resolvedReference.revisionId, current.id));
@@ -38,19 +38,19 @@ export async function deriveRevision(db: Db, campaignId: string, change: Revisio
   switch (change.type) {
     case "remove_reference": {
       const ref = refs.find((r) => r.id === change.referenceId && r.status === "confirmed");
-      if (!ref) throw new RevisionError("That reference is not part of the current revision.");
-      if (refs.filter((r) => r.status === "confirmed").length <= 1) throw new RevisionError("Keep at least one confirmed reference.");
+      if (!ref) throw new RevisionError("That name is no longer in this version of the brief.");
+      if (refs.filter((r) => r.status === "confirmed").length <= 1) throw new RevisionError("Keep at least one name in the brief.");
       keepRefs = keepRefs.filter((r) => r.id !== ref.id);
       changeNote = `Removed “${ref.label}”`;
       break;
     }
     case "remove_input": {
       const input = inputs.find((i) => i.id === change.inputId);
-      if (!input) throw new RevisionError("That audience input is not part of the current revision.");
+      if (!input) throw new RevisionError("That audience note is no longer in this version of the brief.");
       keepInputs = inputs.filter((i) => i.id !== input.id);
       // References that came from this statement go with it.
       keepRefs = keepRefs.filter((r) => r.briefInputId !== input.id);
-      changeNote = `Removed the audience input “${input.text}”`;
+      changeNote = `Removed the audience note “${input.text}”`;
       break;
     }
     case "set_budget": {
