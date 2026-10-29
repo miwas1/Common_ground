@@ -21,7 +21,7 @@ import { directionProfiles, directionSignals } from "../profiles";
  * triathletes for running shoes. So the filter is creator occupations (urn:tag:occupation:person:*)
  * plus the category's own talent from "Understanding your brief". With creator occupations alone,
  * running campaigns got explorers and self-help authors; with no filter, a coffee direction built on
- * comedy references got comedians. If the filtered query comes back thin, the unfiltered one is used.
+ * comedy references got comedians. A thin result stays thin: unfiltered results were mostly not creators.
  * Politicians are excluded; people Qloo records as deceased are skipped.
  */
 export const EXCLUDED_OCCUPATIONS = ["politician"].map((o) => `urn:tag:occupation:person:${o}`);
@@ -29,7 +29,8 @@ export const EXCLUDED_OCCUPATIONS = ["politician"].map((o) => `urn:tag:occupatio
 export const CREATOR_OCCUPATIONS = ["youtuber", "video_blogger", "blogger", "influencer", "instagrammer", "tiktoker", "twitch_streamer", "content_creator", "podcaster"];
 /** Creator occupations used in the filter: podcasters pulled podcast-led directions towards authors and hosts. */
 const FILTER_CREATORS = CREATOR_OCCUPATIONS.filter((o) => o !== "podcaster");
-const MIN_FILTERED = 4;
+/** Fewer talent matches than this and general creators are added to the filter. */
+const MIN_TALENT = 4;
 
 const Talent = z.object({ talent: z.array(z.string()) });
 
@@ -62,7 +63,9 @@ export async function discoverCreators(ctx: StageCtx): Promise<DiscoverOutput> {
   const parsed = await optionalStageOutput<ParsedBrief>(ctx.db, ctx.runId, 1);
   const profiles = await directionProfiles(ctx.db, ctx.runId);
   const talent = await categoryTalent(ctx, parsed?.productCategory ?? form.product.name, form.brandName);
-  const filterTags = [...FILTER_CREATORS, ...talent].map((o) => `urn:tag:occupation:person:${o}`);
+  const occupationTags = (list: string[]) => list.map((o) => `urn:tag:occupation:person:${o}`);
+  const talentTags = occupationTags(talent);
+  const filterTags = occupationTags([...FILTER_CREATORS, ...talent]);
   await ctx.db.delete(discoveredCreator).where(eq(discoveredCreator.runId, ctx.runId));
 
   // The brief's own brands anchor the search in the brand's category; the direction's references and
@@ -80,19 +83,23 @@ export async function discoverCreators(ctx: StageCtx): Promise<DiscoverOutput> {
   const suggested: string[] = [];
   for (const p of profiles) {
     const signals = signalsFor(p);
-    const ask = (filtered: boolean) =>
+    // The category's own talent first (runners for running shoes): with creators of any kind, a direction
+    // built on podcasts and ideas returned science YouTubers. General creators join only when talent is thin.
+    // Never unfiltered: that brought in people with no creator or talent occupation at all.
+    const ask = (tags: string[]) =>
       ctx.qloo.recommend({
         type: "urn:entity:person",
         signals,
         take: DISCOVER_TAKE + 2,
-        ...(filtered ? { tags: filterTags, tagsOperator: "union" as const } : {}),
+        tags,
+        tagsOperator: "union",
         excludeTags: EXCLUDED_OCCUPATIONS,
         excludeEntities: suggested.length ? [...suggested] : undefined,
         // Attribution is only informative with two or more seed entities (PLAN.md §1).
         explain: signals.entities.length >= 2,
       });
-    let res = await ask(true);
-    if (res.status !== "error" && res.data.entities.length < MIN_FILTERED) res = await ask(false);
+    let res = talentTags.length ? await ask(talentTags) : null;
+    if (!res || (res.status !== "error" && res.data.entities.filter((e) => !e.deceased).length < MIN_TALENT)) res = await ask(filterTags);
     if (res.status === "error") throw new Error(`Qloo creator search failed (${p.direction.title}): ${res.error.message}`);
     // Two extra were asked for, so skipping people Qloo records as deceased still leaves a full list.
     const living = res.data.entities.filter((e) => !e.deceased).slice(0, DISCOVER_TAKE);

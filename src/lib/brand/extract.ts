@@ -36,10 +36,10 @@ const Extracted = z.object({
 
 const SYSTEM = `You read a brand's document and pull out what the brand knows, for a creative strategy tool.
 Kinds:
-- research: what customers said or did, from interviews, surveys, reviews or data.
+- research: what customers said or did, from interviews, surveys, reviews or data. Only use it when the document reports evidence from customers; launch dates, prices, availability, specs and company announcements are never research.
 - belief: what the brand team thinks or assumes, not backed by research in the document.
 - measured: results of past campaigns or content (numbers allowed).
-- product: facts about the product.
+- product: facts about the product, including its price, availability, launch and release dates.
 - positioning: how the brand describes its place in the market.
 - tone: how the brand speaks.
 - approved_claim: claims the brand has cleared to make.

@@ -13,7 +13,8 @@ import { objectWithValidation } from "@/lib/llm";
 import { loadRun, type StageCtx } from "../context";
 import { directionProfiles } from "../profiles";
 
-const CHECKED_KINDS = ["research", "measured", "belief", "positioning", "avoid"] as const;
+// Product facts count too: without them a direction built on the product's real features reads as "not covered".
+const CHECKED_KINDS = ["research", "measured", "belief", "product", "positioning", "avoid"] as const;
 
 export type FitVerdict = "supports" | "tension" | "not_covered";
 export type FitOutput = {
@@ -37,11 +38,15 @@ For each direction say whether the brand's statements support it, pull against i
 Tension matters most: a direction built on craftsmanship when customer research says convenience matters more should be flagged, with what to test.
 Cite the statements you rely on by listing their keys in "statements"; don't put keys in the note. Treat team beliefs as beliefs, not evidence. No predictions about sales or individuals.`;
 
+const KEY_LIST = /\s*\(\s*K\d+(?:\s*(?:,|;|and|&)\s*K\d+)*\s*\)/g;
+
 /** Statement keys belong in "statements"; drop any the model leaves in the note ("… (K4, K5)"). */
 export const withoutStatementKeys = (text: string) =>
   text
-    .replace(/\s*\(\s*K\d+(?:\s*(?:,|;|and|&)\s*K\d+)*\s*\)/g, "")
-    .replace(/\bK\d+\b/g, "")
+    .replace(KEY_LIST, "")
+    // A key the model still used as a word: keep the sentence readable rather than leaving a hole.
+    .replace(/\bK\d+(?:\s*(?:,|and|&)\s*K\d+)*'s\b/g, "the profile's")
+    .replace(/\bK\d+(?:\s*(?:,|and|&)\s*K\d+)*\b/g, "the profile")
     .replace(/\s+([,.;:])/g, "$1")
     .replace(/\s{2,}/g, " ")
     .trim();
@@ -77,6 +82,9 @@ export async function checkAgainstProfile(ctx: StageCtx): Promise<FitOutput> {
         seen.add(d.direction);
         if (d.verdict !== "not_covered") issues.push(...checkKeys(d.statements, new Set(keys.keys()), `directions[${i}].statements`));
         issues.push(...checkClaims(d.note, `directions[${i}].note`));
+        if (/\bK\d+\b/.test(d.note.replace(KEY_LIST, ""))) {
+          issues.push({ path: `directions[${i}].note`, message: "names a statement key (K…) inside a sentence; describe the statement in words (e.g. \"the brand's view that…\") and list its key in \"statements\"" });
+        }
       });
       if (seen.size !== profiles.length) issues.push({ path: "directions", message: `answer for all ${profiles.length} directions` });
       return issues;

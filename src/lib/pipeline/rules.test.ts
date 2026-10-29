@@ -128,6 +128,7 @@ describe("capability reasons", () => {
 describe("profile check notes", () => {
   it("drops statement keys the model leaves in prose", () => {
     expect(withoutStatementKeys("Customers host at weekends (K4), and hosting videos did well (K5, K6).")).toBe("Customers host at weekends, and hosting videos did well.");
-    expect(withoutStatementKeys("As K2 says, speed wins.")).toBe("As says, speed wins.");
+    expect(withoutStatementKeys("As K2 says, speed wins.")).toBe("As the profile says, speed wins.");
+    expect(withoutStatementKeys("K3's return to basics fits.")).toBe("the profile's return to basics fits.");
   });
 });

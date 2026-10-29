@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Suspense } from "react";
 import { createCampaign } from "@/app/actions";
 import { ActionForm } from "@/components/action-form";
@@ -20,8 +21,12 @@ const SELECT = "h-9 w-full rounded-md border border-input bg-background px-3 tex
 
 const SOURCES = Object.entries(SOURCE_LABEL).map(([value, label]) => ({ value, label }));
 
-async function NewCampaignForm() {
+// The form starts empty, with the coffee example as hints. `?example=1` fills it in for a one-click first run;
+// pre-filled values otherwise leak into real briefs (a description left from the example, for instance).
+async function NewCampaignForm({ searchParams }: { searchParams: Promise<{ example?: string }> }) {
   const actor = await pageActor();
+  const fill = (await searchParams).example === "1" ? EXAMPLE : null;
+  const hint = (v: string) => `e.g. ${v}`;
   const org = await actingBrandOrg(actor.userId, actor.activeOrganizationId);
   const profile = org ? (await approvedFacts(await getDb(), org)).filter((f) => ["research", "measured", "belief", "avoid", "approved_claim"].includes(f.kind)) : [];
   return (
@@ -32,10 +37,10 @@ async function NewCampaignForm() {
             <CardTitle>1 · Your goal</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-4">
-            <Field label="Campaign name" name="name" defaultValue={EXAMPLE.name} />
+            <Field label="Campaign name" name="name" defaultValue={fill?.name} placeholder={hint(EXAMPLE.name)} />
             <div className="grid gap-1.5">
               <Label htmlFor="objective">What do you want this campaign to do?</Label>
-              <Textarea id="objective" name="objective" defaultValue={EXAMPLE.objective} rows={2} />
+              <Textarea id="objective" name="objective" defaultValue={fill?.objective} placeholder={hint(EXAMPLE.objective)} rows={2} />
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="campaignType">What do you need from creators?</Label>
@@ -55,19 +60,19 @@ async function NewCampaignForm() {
           </CardHeader>
           <CardContent className="grid gap-4">
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Brand" name="brandName" defaultValue={EXAMPLE.brandName} required />
-              <Field label="Product" name="productName" defaultValue={EXAMPLE.productName} required />
+              <Field label="Brand" name="brandName" defaultValue={fill?.brandName} placeholder={hint(EXAMPLE.brandName)} required />
+              <Field label="Product" name="productName" defaultValue={fill?.productName} placeholder={hint(EXAMPLE.productName)} required />
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="productDescription">Product description</Label>
-              <Textarea id="productDescription" name="productDescription" defaultValue={EXAMPLE.productDescription} rows={2} />
+              <Textarea id="productDescription" name="productDescription" defaultValue={fill?.productDescription} placeholder={hint(EXAMPLE.productDescription)} rows={2} />
             </div>
             <fieldset className="grid gap-2">
               <legend className="mb-1 text-sm font-medium">Your audience</legend>
               {[0, 1, 2, 3, 4].map((i) => (
                 <div key={i} className="grid gap-2 sm:grid-cols-[1fr_200px]">
-                  <Input name={`audience_${i}`} aria-label={`Audience note ${i + 1}`} defaultValue={EXAMPLE.audience[i]?.text ?? ""} placeholder="e.g. Most buyers are new parents" />
-                  <select name={`audience_source_${i}`} aria-label={`Where audience note ${i + 1} comes from`} defaultValue={EXAMPLE.audience[i]?.source ?? "team"} className={SELECT}>
+                  <Input name={`audience_${i}`} aria-label={`Audience note ${i + 1}`} defaultValue={fill?.audience[i]?.text ?? ""} placeholder={i === 0 ? "e.g. Most buyers are new parents" : undefined} />
+                  <select name={`audience_source_${i}`} aria-label={`Where audience note ${i + 1} comes from`} defaultValue={fill?.audience[i]?.source ?? "team"} className={SELECT}>
                     {SOURCES.map((s) => (
                       <option key={s.value} value={s.value}>{s.label}</option>
                     ))}
@@ -77,7 +82,7 @@ async function NewCampaignForm() {
             </fieldset>
             <div className="grid gap-1.5">
               <Label htmlFor="notes">What your customers love</Label>
-              <Textarea id="notes" name="notes" defaultValue={EXAMPLE.notes} rows={3} />
+              <Textarea id="notes" name="notes" defaultValue={fill?.notes} placeholder={hint(EXAMPLE.notes)} rows={3} />
               <p className="text-xs text-muted-foreground">Name brands, artists, shows, podcasts or books your customers like. If a name could mean more than one thing, we&apos;ll ask.</p>
             </div>
           </CardContent>
@@ -113,8 +118,8 @@ async function NewCampaignForm() {
             <CardTitle>3 · The content</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-4">
-            <Field label="What you need made" name="deliverables" defaultValue={EXAMPLE.deliverables} />
-            <Field label="Anything to avoid" name="constraints" defaultValue={EXAMPLE.constraints} />
+            <Field label="What you need made" name="deliverables" defaultValue={fill?.deliverables} placeholder={hint(EXAMPLE.deliverables)} />
+            <Field label="Anything to avoid" name="constraints" defaultValue={fill?.constraints} placeholder={hint(EXAMPLE.constraints)} />
           </CardContent>
         </Card>
       </div>
@@ -126,7 +131,7 @@ async function NewCampaignForm() {
           </CardHeader>
           <CardContent className="grid gap-4">
             <div className="grid grid-cols-[1fr_96px] gap-2">
-              <Field label="Budget" name="budget" defaultValue="12000" inputMode="decimal" />
+              <Field label="Budget" name="budget" defaultValue={fill ? "12000" : undefined} placeholder="e.g. 12000" inputMode="decimal" />
               <div className="grid gap-1.5">
                 <Label htmlFor="currency">Currency</Label>
                 <select id="currency" name="currency" defaultValue="USD" className={SELECT}>
@@ -168,13 +173,18 @@ function Field({ label, name, ...props }: { label: string; name: string } & Reac
   );
 }
 
-export default function NewCampaignPage() {
+export default function NewCampaignPage({ searchParams }: { searchParams: Promise<{ example?: string }> }) {
   return (
     <AppShell>
       <h1 className="text-2xl font-semibold tracking-tight">New campaign</h1>
-      <p className="mt-1 text-sm text-muted-foreground">We&apos;ve filled in an example. Change anything, or run it as it is.</p>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Describe your brand and customers. Just looking around?{" "}
+        <Link href="/brand/campaigns/new?example=1" className="font-medium text-foreground underline-offset-4 hover:underline">Fill in an example brief</Link>
+        {" · "}
+        <Link href="/brand/campaigns/new" className="underline-offset-4 hover:underline">Start blank</Link>
+      </p>
       <Suspense>
-        <NewCampaignForm />
+        <NewCampaignForm searchParams={searchParams} />
       </Suspense>
     </AppShell>
   );
