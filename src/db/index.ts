@@ -47,7 +47,9 @@ export function getDb(): Promise<Db> {
     if (!url && process.env.VERCEL) {
       throw new Error("DATABASE_URL must be set in deployed environments (PGlite is local-only).");
     }
-    const connecting = url ? connectNeon(url) : connectPglite(pgliteDataDir());
+    // A local `next build` gets a throwaway database: opening .pglite while `pnpm dev` holds it corrupts it.
+    const building = process.env.NEXT_PHASE === "phase-production-build";
+    const connecting = url ? connectNeon(url) : connectPglite(building ? "memory://" : pgliteDataDir());
     // Don't cache a failed connection; the next call retries.
     globalForDb.__commonGroundDb = connecting.catch((err) => {
       globalForDb.__commonGroundDb = undefined;

@@ -1,3 +1,22 @@
+import {
+  ArrowRight,
+  BookOpen,
+  Check,
+  Columns3,
+  Compass,
+  Contact,
+  FileText,
+  PenLine,
+  Quote,
+  Scale,
+  Search,
+  ShieldCheck,
+  Timer,
+  TriangleAlert,
+  UsersRound,
+  Wallet,
+  type LucideIcon,
+} from "lucide-react";
 import Link from "next/link";
 import { signInAsDemo } from "@/app/actions";
 import { PublicShell } from "@/components/public-shell";
@@ -6,32 +25,36 @@ import { Button } from "@/components/ui/button";
 const steps = [
   {
     title: "Tell us about your brand",
-    body: "Your product, what you want the campaign to do, your budget, and what you know about your customers, including the brands, shows and artists they love.",
+    body: "Your product, your goal, your budget and what you know about your customers, or upload your customer research once and reuse it in every brief.",
   },
   {
     title: "We research their tastes",
-    body: "Qloo's data shows what else people with those tastes enjoy: music, shows, podcasts, places and brands. If a name could mean two things, we ask.",
+    body: "We read up on your brand and market, then Qloo's data shows what else people with those tastes enjoy: music, shows, podcasts, places and brands.",
   },
   {
     title: "Get creative directions",
-    body: "Three or four directions for your campaign, each with a clear idea, the look and feel, and the data behind it.",
+    body: "Three or four directions, each with a clear idea, the look and feel, the data behind it, and a check against what your own research says.",
   },
   {
     title: "Meet the right creators",
-    body: "Real creators Qloo matched to each direction, and your own roster ranked the same way, with ready-to-pitch proposals and budget options.",
+    body: "Real creators Qloo matched to each direction and your own roster ranked the same way, with ready-to-pitch proposals and budget options.",
   },
 ];
 
-const features = [
-  ["Creative directions", "Each direction comes with who it speaks to, where your product fits, scene ideas and the look and feel."],
-  ["Real creators, found by Qloo", "For each direction, Qloo names real creators whose audience shares its taste, with their Instagram handle and their audience's age and gender lean."],
-  ["See the evidence", "Every insight shows the Qloo data it's based on, so you know why a direction or creator was suggested."],
-  ["Try a change", "Remove something from the brief or change the budget, and get a new version you can compare with the old one."],
-  ["Budget options", "Several ways to spend your budget, built from each creator's actual price."],
-  ["With or without Qloo", "Run the same brief without Qloo's data and compare the two blind, so you can judge what it adds."],
-  ["Your own creators", "Import your roster from a spreadsheet. Each creator is checked against Qloo and ranked for every direction. No quote yet? They stay in as “Quote required”."],
-  ["Briefs you can share", "Each proposal becomes a clean brief you can print, save as a PDF or send to the creator."],
-] as const;
+const features: { icon: LucideIcon; title: string; body: string }[] = [
+  { icon: Compass, title: "Creative directions", body: "Who each direction speaks to, where your product fits, scenes to shoot and the look and feel." },
+  { icon: UsersRound, title: "Real creators, found by Qloo", body: "People whose audience shares each direction's taste, with their Instagram handle and audience lean." },
+  { icon: Contact, title: "Your own creators", body: "Import your roster from a spreadsheet. Everyone is checked against Qloo and ranked for each direction." },
+  { icon: BookOpen, title: "Your brand profile", body: "Upload research once. What customers said, what your team believes and what past campaigns showed, kept apart." },
+  { icon: ShieldCheck, title: "Checked against what you know", body: "If customers told you convenience beats craftsmanship, a craft-led idea gets flagged, with the passage." },
+  { icon: Search, title: "See the evidence", body: "Every insight shows the Qloo data it rests on, so you know why a direction or creator was suggested." },
+  { icon: PenLine, title: "Change one thing, keep the rest", body: "Edit a proposal, ask for a simpler version or swap the creator, without redoing the research." },
+  { icon: Columns3, title: "Compare side by side", body: "Put two or three proposals next to each other: idea, story, deliverables, price and fit." },
+  { icon: Wallet, title: "Budget options", body: "Ways to spend your budget from each creator's real price. Try another budget and they change instantly." },
+  { icon: Scale, title: "With or without Qloo", body: "Run the same brief without Qloo's data and compare the two blind, so you can judge what it adds." },
+  { icon: FileText, title: "Briefs you can share", body: "Each proposal becomes a clean brief to print, save as a PDF or send to the creator." },
+  { icon: Timer, title: "Watch it work", body: "Live progress with a time estimate. Close the tab and come back: the research keeps going." },
+];
 
 /** Situations a brand or agency team is in, what they type in, and what they leave with. */
 const useCases = [
@@ -49,10 +72,10 @@ const useCases = [
     get: "Directions and proposals with the reasons attached, plus briefs to print or save as a PDF for the deck.",
   },
   {
-    who: "Moving into a new market",
-    situation: "A skincare brand that sells well in the UK wants to reach the same kind of customer in the US.",
-    give: "The brands, artists and shows its UK customers love, and the US as the market.",
-    get: "What people with those tastes also enjoy, so the campaign speaks their language instead of copying the UK one.",
+    who: "Your second campaign",
+    situation: "The team ran a campaign last quarter and doesn't want to explain the brand, the customers and the rules all over again.",
+    give: "Nothing new: your brand profile already holds your research, results and rules.",
+    get: "A brief prefilled from what you already know, and directions checked against it before you commit.",
   },
   {
     who: "Checking a hunch",
@@ -75,7 +98,7 @@ const useCases = [
 ] as const;
 
 const principles = [
-  ["Data and opinions are kept apart", "Facts from Qloo's data are labelled as such. The AI's suggestions are labelled as insights, and each one points to the data behind it."],
+  ["Sources are kept apart", "Qloo's data, your own research and the AI's suggestions are each labelled, and every suggestion points to what it's based on."],
   ["Nothing made up", "The AI can only point to data that actually came back from Qloo for your brief. If there's no data, it says so instead of guessing."],
   ["About groups, not people", "Qloo describes the shared tastes of groups of people. Nothing here tracks or predicts what one person will do."],
 ] as const;
@@ -97,8 +120,8 @@ export default function Home() {
               <em className="text-primary">the culture your customers live in.</em>
             </h1>
             <p className="mt-6 max-w-xl text-lg text-muted-foreground">
-              Tell us about your brand and your customers. Common Ground finds what else they love, suggests creative
-              directions for your campaign, and matches you with creators who fit, each with a proposal and a price.
+              Tell us about your brand and your customers. Common Ground finds what else they love, suggests creative directions, checks them against
+              your own research, and finds real creators whose audience fits, each with a proposal and a price.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               {/* A plain link: /showcase signs visitors in to the demo, so it must never be prefetched. */}
@@ -118,12 +141,13 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ── Who it's for ─────────────────────────────────────── */}
+      {/* ── At a glance ──────────────────────────────────────── */}
       <section className="border-b bg-card">
-        <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-12 sm:px-8 md:grid-cols-3">
+        <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-12 sm:grid-cols-2 sm:px-8 lg:grid-cols-4">
           <Stat figure="One brief" label="is all you write. Made for brand and agency teams who work with creators." />
           <Stat figure="3–4 directions" label="come back, each built around what your customers already love." />
-          <Stat figure="Ready-to-pitch proposals" label="with the creator, the idea, what gets made and the price, plus the reasons behind each one." />
+          <Stat figure="Real creators" label="whose audience shares each direction's taste, named by Qloo, plus your own roster." />
+          <Stat figure="Your research" label="kept in one place, reused in every brief and checked against every idea." />
         </div>
       </section>
 
@@ -131,7 +155,7 @@ export default function Home() {
       <section id="how-it-works" className="scroll-mt-16">
         <div className="mx-auto w-full max-w-6xl px-4 py-20 sm:px-8">
           <SectionHead kicker="How it works" title="From a brief to creator proposals" />
-          <ol className="mt-12 grid gap-px overflow-hidden rounded-2xl border bg-border md:grid-cols-4">
+          <ol className="mt-12 grid gap-px overflow-hidden rounded-2xl border bg-border md:grid-cols-2 lg:grid-cols-4">
             {steps.map((step, i) => (
               <li key={step.title} className="flex flex-col bg-card p-6">
                 <span className="font-display text-4xl text-primary">{String(i + 1).padStart(2, "0")}</span>
@@ -143,6 +167,35 @@ export default function Home() {
           <p className="mt-6 max-w-2xl text-sm text-muted-foreground">
             Not sure about something? Change it, and you get a new version to compare with the first.
           </p>
+        </div>
+      </section>
+
+      {/* ── Inside the product ───────────────────────────────── */}
+      <section id="inside" className="scroll-mt-16 border-t bg-card">
+        <div className="mx-auto grid w-full max-w-6xl gap-24 px-4 py-24 sm:px-8">
+          <SectionHead kicker="Inside the product" title="Three things a creative brief tool usually can't do" />
+          <Spotlight
+            kicker="Real creators"
+            title="Real people whose audience shares the taste"
+            body="For every direction, Qloo names creators and talent whose audience overlaps with it: food creators for a coffee brand, marathon runners for a running shoe."
+            points={["Their Instagram handle and their audience's age and gender lean", "Ranked within each direction, never across directions", "Add anyone to your roster in one click; no quote yet means “Quote required”"]}
+            preview={<CreatorsPreview />}
+          />
+          <Spotlight
+            reverse
+            kicker="Your research"
+            title="Checked against what you already know"
+            body="Upload customer research once. Every direction is checked against it, so an idea that pulls against what your customers told you is flagged, with the passage that says so."
+            points={["What customers said, what your team believes and what past campaigns showed, kept apart", "Every statement links to the page it came from", "Approved statements prefill your next brief"]}
+            preview={<ProfilePreview />}
+          />
+          <Spotlight
+            kicker="Control"
+            title="Change one thing, keep the rest"
+            body="Edit a proposal, ask for a simpler version of the same idea, or swap the creator. The research isn't redone and nothing is overwritten."
+            points={["Every change is a new version, credited to whoever made it", "Compare proposals side by side", "Try a different budget and see the options change instantly"]}
+            preview={<VersionsPreview />}
+          />
         </div>
       </section>
 
@@ -183,16 +236,18 @@ export default function Home() {
       <section id="features" className="scroll-mt-16 border-y bg-card">
         <div className="mx-auto w-full max-w-6xl px-4 py-20 sm:px-8">
           <SectionHead kicker="Features" title="Everything you need to pick creators and brief them" />
-          <dl className="mt-12 grid gap-x-10 gap-y-10 sm:grid-cols-2 lg:grid-cols-4">
-            {features.map(([title, body], i) => (
-              <div key={title} className="border-t pt-5">
+          <dl className="mt-12 grid gap-px overflow-hidden rounded-2xl border bg-border sm:grid-cols-2 lg:grid-cols-4">
+            {features.map(({ icon: Icon, title, body }, i) => (
+              <div key={title} className="bg-card p-6">
                 <span
                   aria-hidden
-                  className="block h-1 w-8 rounded-full"
-                  style={{ background: `var(--direction-${(i % 4) + 1})` }}
-                />
+                  className="flex size-9 items-center justify-center rounded-lg"
+                  style={{ background: `color-mix(in oklab, var(--direction-${(i % 4) + 1}) 14%, transparent)`, color: `var(--direction-${(i % 4) + 1})` }}
+                >
+                  <Icon className="size-[18px]" strokeWidth={2} />
+                </span>
                 <dt className="mt-4 font-semibold">{title}</dt>
-                <dd className="mt-2 text-sm leading-relaxed text-muted-foreground">{body}</dd>
+                <dd className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{body}</dd>
               </div>
             ))}
           </dl>
@@ -226,7 +281,7 @@ export default function Home() {
             See a finished campaign, or try it on your own brand.
           </h2>
           <p className="mt-4 max-w-xl text-background/70">
-            The demo uses a made-up coffee brand and made-up creators. The research uses real Qloo data.
+            The demo uses a made-up coffee brand, a made-up roster and a made-up research document. The research and the real creators come from Qloo.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Button size="lg" className="h-11 bg-background px-5 text-base text-foreground hover:bg-background/90" asChild>
@@ -265,6 +320,161 @@ function Stat({ figure, label }: { figure: string; label: string }) {
   );
 }
 
+/** One feature told in words on one side and shown as a preview of the app on the other. */
+function Spotlight({
+  kicker,
+  title,
+  body,
+  points,
+  preview,
+  reverse = false,
+}: {
+  kicker: string;
+  title: string;
+  body: string;
+  points: string[];
+  preview: React.ReactNode;
+  reverse?: boolean;
+}) {
+  return (
+    <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-16">
+      <div className={reverse ? "lg:order-2" : ""}>
+        <p className="text-xs font-semibold tracking-widest text-primary uppercase">{kicker}</p>
+        <h3 className="mt-3 font-display text-3xl leading-tight sm:text-4xl">{title}</h3>
+        <p className="mt-4 max-w-lg leading-relaxed text-muted-foreground">{body}</p>
+        <ul className="mt-6 grid gap-2.5 text-sm">
+          {points.map((p) => (
+            <li key={p} className="grid grid-cols-[1.25rem_1fr] gap-2">
+              <Check className="mt-0.5 size-4 text-success" strokeWidth={2.5} aria-hidden />
+              {p}
+            </li>
+          ))}
+        </ul>
+      </div>
+      <figure className={reverse ? "lg:order-1" : ""}>
+        <div className="rounded-2xl border bg-background p-4 shadow-[0_24px_60px_-34px_rgb(32_33_36/0.35)] sm:p-6">{preview}</div>
+        <figcaption className="mt-3 text-center text-xs text-muted-foreground">Illustration of the app. Names here are made up.</figcaption>
+      </figure>
+    </div>
+  );
+}
+
+const initials = (name: string) => name.split(/\s+/).map((w) => w[0]).slice(0, 2).join("");
+
+function CreatorsPreview() {
+  const people = [
+    { name: "Dana Okafor", handle: "danacooks", jobs: "Cookbook writer · YouTuber", lean: "ages 25–34 · female", fits: true },
+    { name: "Theo Marsh", handle: "theobakes", jobs: "Baker · TikToker", lean: "ages 25–29", fits: true },
+    { name: "Priya Lane", handle: "priyaathome", jobs: "Food stylist · Photographer", lean: "ages 35–44 · female", fits: false },
+    { name: "Jun Park", handle: "junbrews", jobs: "Coffee YouTuber", lean: "ages 30–34 · male", fits: true },
+  ];
+  return (
+    <div aria-hidden>
+      <p className="text-[11px] font-semibold tracking-[0.14em] text-info uppercase">Real creators Qloo matched to this direction</p>
+      <ul className="mt-4 grid gap-3 sm:grid-cols-2">
+        {people.map((p, i) => (
+          <li key={p.name} className={`rounded-xl border bg-card p-3.5 ${i > 1 ? "hidden sm:block" : ""}`}>
+            <div className="flex items-start gap-2.5">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-full border-2 border-direction-1 text-[11px] font-semibold">{initials(p.name)}</span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">{p.name}</p>
+                <p className="text-xs text-muted-foreground">@{p.handle}</p>
+              </div>
+              <span className="rounded bg-info-soft px-1.5 py-0.5 text-[10px] font-medium text-info">#{i + 1} of 8</span>
+            </div>
+            <p className="mt-2 text-xs">
+              <span className="mr-1 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">Creator</span>
+              {p.jobs}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Audience: {p.lean}
+              {p.fits && <span className="font-medium text-success"> · in your target ages</span>}
+            </p>
+            <p className="mt-2.5 rounded-md border py-1 text-center text-xs font-medium">+ Add to roster</p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function ProfilePreview() {
+  return (
+    <div aria-hidden className="grid gap-3">
+      <div className="rounded-xl border bg-card p-4">
+        <p className="inline-flex rounded-full bg-info-soft px-2.5 py-0.5 text-xs font-medium text-info">From customer research</p>
+        <p className="mt-2.5 text-sm">Craftsmanship matters less to customers than speed and price.</p>
+        <p className="mt-2 border-l-2 border-info/40 pl-2.5 text-xs text-muted-foreground">
+          <Quote className="mr-1 inline size-3" />
+          “craftsmanship mattered less to them than speed and price” · Customer interviews, p. 1
+        </p>
+      </div>
+      <div className="rounded-xl bg-muted/60 p-4">
+        <p className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">Checks · The Hand-Pulled Hour</p>
+        <div className="mt-3 grid grid-cols-[1.5rem_1fr] gap-2.5">
+          <span className="mt-0.5 flex size-6 items-center justify-center rounded-full bg-success-soft text-success">
+            <Check className="size-3.5" strokeWidth={2.5} />
+          </span>
+          <div>
+            <p className="text-xs text-muted-foreground">Does it hang together?</p>
+            <p className="text-sm font-medium">Yes</p>
+          </div>
+        </div>
+        <div className="mt-3 grid grid-cols-[1.5rem_1fr] gap-2.5 border-t pt-3">
+          <span className="mt-0.5 flex size-6 items-center justify-center rounded-full bg-warning-soft text-warning">
+            <TriangleAlert className="size-3.5" strokeWidth={2.5} />
+          </span>
+          <div>
+            <p className="text-xs text-muted-foreground">Does it fit what you know?</p>
+            <p className="text-sm font-medium">There&apos;s a tension</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              <span className="font-semibold tracking-wide text-accent-foreground uppercase">Insight</span> This direction leans on craft, but customers say speed and price
+              matter more. Test a quicker, everyday version alongside it.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function VersionsPreview() {
+  const versions = [
+    { n: "v3", note: "Edited by you: opening line, deliverables", who: "You · today", current: true },
+    { n: "v2", note: "Same idea, simpler production: one location, phone shot, four beats", who: "Agent · today" },
+    { n: "v1", note: "Drafted by the agent", who: "Agent · yesterday" },
+  ];
+  return (
+    <div aria-hidden className="grid gap-4">
+      <div className="flex flex-wrap gap-2">
+        {["Edit", "Simpler version", "Swap creator"].map((b) => (
+          <span key={b} className="rounded-md border bg-card px-3 py-1.5 text-xs font-medium">{b}</span>
+        ))}
+        <span className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground">Open brief to share</span>
+      </div>
+      <div className="rounded-xl border bg-card p-4">
+        <p className="text-sm font-medium">Versions</p>
+        <p className="text-xs text-muted-foreground">Every change is a new version. Nothing is overwritten.</p>
+        <ol className="mt-3 grid gap-2.5">
+          {versions.map((v) => (
+            <li key={v.n} className="grid grid-cols-[2.25rem_1fr] gap-2 text-sm">
+              <span className={`flex h-6 items-center justify-center rounded-md text-xs font-medium ${v.current ? "bg-primary text-primary-foreground" : "bg-muted"}`}>{v.n}</span>
+              <div>
+                <p>{v.note}</p>
+                <p className="text-xs text-muted-foreground">{v.who}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </div>
+      <div className="flex items-center justify-between gap-3 rounded-xl border border-info/25 bg-info-soft px-4 py-3 text-sm">
+        <span>Showing options for <span className="font-medium">$6,000</span> instead of $12,000. Nothing is saved.</span>
+        <ArrowRight className="size-4 shrink-0 text-info" />
+      </div>
+    </div>
+  );
+}
+
 /** A static sketch of a direction card: what one looks like, not real Qloo output. */
 function DirectionBoard() {
   const worlds = [
@@ -272,6 +482,7 @@ function DirectionBoard() {
     ["Shows", "Slow-TV and craft documentaries"],
     ["Places", "Neighbourhood roasters, bike cafés"],
   ];
+  const checks = ["Hangs together", "Holds up", "Suits your audience", "Fits your research"];
   return (
     <figure className="relative mx-auto w-full max-w-md lg:max-w-none">
       <div aria-hidden className="absolute -top-4 -right-3 h-full w-full rotate-3 rounded-2xl border bg-card/60" />
@@ -282,12 +493,20 @@ function DirectionBoard() {
             <span className="size-2 rounded-full bg-direction-1" />
             Direction 1 of 3
           </span>
-          <span className="rounded-full bg-success-soft px-2 py-0.5 text-[11px] font-medium text-success">Passed all 3 checks</span>
+          <span className="text-[11px] text-muted-foreground">Passed 4 of 4 checks</span>
         </div>
         <h3 className="mt-3 font-display text-3xl leading-tight">The Unhurried Morning</h3>
-        <p className="mt-1 text-sm text-muted-foreground">Slow rituals, considered objects, craft over speed.</p>
+        <p className="mt-1 text-sm text-muted-foreground">Slow rituals, considered objects, a calm start before work.</p>
 
-        <ul className="mt-5 grid gap-2">
+        <ul className="mt-4 flex flex-wrap gap-1.5">
+          {checks.map((label) => (
+            <li key={label} className="inline-flex items-center gap-1 rounded-full bg-success-soft px-2 py-0.5 text-[11px] font-medium text-success">
+              <Check className="size-3" strokeWidth={3} /> {label}
+            </li>
+          ))}
+        </ul>
+
+        <ul className="mt-4 grid gap-2">
           {worlds.map(([k, v]) => (
             <li key={k} className="flex items-baseline gap-3 rounded-lg bg-muted px-3 py-2 text-sm">
               <span className="w-14 shrink-0 text-xs font-medium text-muted-foreground">{k}</span>
@@ -296,7 +515,7 @@ function DirectionBoard() {
           ))}
         </ul>
 
-        <div className="mt-5 grid gap-2 text-sm">
+        <div className="mt-4 grid gap-2 text-sm">
           <p className="rounded-lg border-l-2 border-info bg-info-soft px-3 py-2">
             <span className="block text-[11px] font-semibold tracking-wide text-info uppercase">Qloo data</span>
             Fans of the brands in your brief lean towards slow-living interests.
@@ -307,16 +526,20 @@ function DirectionBoard() {
           </p>
         </div>
 
-        <div className="mt-5 flex items-center gap-3 border-t pt-4">
-          <div className="flex -space-x-2">
-            {[1, 2, 3].map((n) => (
-              <span key={n} className="size-7 rounded-full border-2 border-card" style={{ background: `var(--direction-${n + 1})` }} />
+        <div className="mt-4 border-t pt-4">
+          <p className="text-[11px] font-semibold tracking-wide text-info uppercase">Real creators matched</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {["Dana Okafor", "Theo Marsh", "Jun Park"].map((n) => (
+              <span key={n} className="inline-flex items-center gap-1.5 rounded-full border bg-background py-0.5 pr-2.5 pl-0.5 text-xs">
+                <span className="flex size-5 items-center justify-center rounded-full bg-direction-2 text-[9px] font-semibold text-white">{initials(n)}</span>
+                {n}
+              </span>
             ))}
+            <span className="self-center text-xs text-muted-foreground">+5 more</span>
           </div>
-          <span className="text-xs text-muted-foreground">3 creators matched · 2 proposals with prices</span>
         </div>
       </div>
-      <figcaption className="mt-4 text-center text-xs text-muted-foreground">Example of a creative direction</figcaption>
+      <figcaption className="relative z-10 mt-8 text-center text-xs text-muted-foreground">Example of a creative direction. Names are made up.</figcaption>
     </figure>
   );
 }

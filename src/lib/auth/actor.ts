@@ -15,8 +15,10 @@ export class UnauthenticatedError extends Error {
 
 /** The signed-in user for this request, or null. */
 export async function getActor(): Promise<(Actor & { activeOrganizationId: string | null }) | null> {
+  // Request headers first: while prerendering, this is where rendering stops, before the database is opened.
+  const requestHeaders = await headers();
   const auth = await getAuth();
-  const session = await auth.api.getSession({ headers: await headers() });
+  const session = await auth.api.getSession({ headers: requestHeaders });
   if (!session) return null;
   return { userId: session.user.id, activeOrganizationId: session.session.activeOrganizationId ?? null };
 }

@@ -17,6 +17,7 @@ export function PublicShell({ children, bleed = false }: { children: ReactNode; 
           </Link>
           <nav className="hidden items-center gap-5 text-sm text-muted-foreground md:flex">
             <Link href="/#how-it-works" className="hover:text-foreground">How it works</Link>
+            <Link href="/#inside" className="hover:text-foreground">Inside</Link>
             <Link href="/#use-cases" className="hover:text-foreground">Use cases</Link>
             <Link href="/#features"className="hover:text-foreground">Features</Link>
             <Link href="/about/qloo" className="hover:text-foreground">How we use Qloo</Link>
