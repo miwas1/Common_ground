@@ -6,9 +6,6 @@ import type { BetterAuthOptions } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
 import { multiSession, organization } from "better-auth/plugins";
 
-/** Invitation links are shown in the UI to copy (no email delivery in scope). */
-export const invitationPath = (invitationId: string) => `/invitations/${invitationId}`;
-
 // `satisfies` (not a return annotation) keeps the plugin types, so `auth.api` exposes plugin
 // endpoints such as createOrganization and sessions carry activeOrganizationId.
 const https = (host?: string) => (host ? `https://${host}` : undefined);

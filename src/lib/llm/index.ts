@@ -4,7 +4,11 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import type { z } from "zod";
+import type { Db } from "@/db";
 import { formatIssues, type Issue } from "@/lib/claims/validate";
+import { costMicros, reserve, settle, worstCaseMicros, type MeteredUsage } from "./spend";
+
+export { LlmBudgetError } from "./spend";
 
 export type Effort = "low" | "medium" | "high" | "xhigh";
 
@@ -64,30 +68,58 @@ export class LlmValidationError extends Error {
 // and stages that call once per direction share the system prefix, so both read from the cache.
 const CACHE = { type: "ephemeral" } as const;
 
-export function anthropicLlm(opts: { apiKey?: string } = {}): Llm {
+/** Allowance for the output schema that structured outputs render into the prompt. */
+const SCHEMA_TOKENS = 4_000;
+/** Allowance per research turn for search results, which come back as input tokens. */
+const SEARCH_RESULT_TOKENS = 50_000;
+
+/**
+ * Sends one request under the spend cap (./spend.ts): reserve the worst case, then settle to the billed cost.
+ * An API error with a status was not billed, so its reservation is released; a dropped connection or a failure
+ * after the response arrived may have been billed, so its reservation stays.
+ */
+async function metered<R extends { usage: MeteredUsage }>(db: Db, worstCase: number, send: () => Promise<R>): Promise<R> {
+  await reserve(db, worstCase);
+  let response: R;
+  try {
+    response = await send();
+  } catch (err) {
+    if (err instanceof Anthropic.APIError && err.status !== undefined) await settle(db, worstCase, 0);
+    throw err;
+  }
+  await settle(db, worstCase, costMicros(response.usage));
+  return response;
+}
+
+export function anthropicLlm(opts: { apiKey?: string; db?: () => Promise<Db> } = {}): Llm {
   const client = new Anthropic(opts.apiKey ? { apiKey: opts.apiKey } : {});
   const model = MODEL;
+  // Imported on first call: stage modules that reach this file are also bundled into workflow code, which has no Node built-ins.
+  const db = opts.db ?? (async () => (await import("@/db")).getDb());
 
   return {
     async object<S extends z.ZodType>({ name, system, prompt, followUp, schema, effort = "medium", maxTokens = 16000 }: ObjectRequest<S>) {
       // No refusal fallback: it would re-run the request on another model.
       // A refusal stops the step with LlmRefusalError instead.
-      const response = await client.messages.parse({
-        model,
-        max_tokens: maxTokens,
-        thinking: { type: "adaptive" },
-        output_config: { effort, format: zodOutputFormat(schema) },
-        system: [{ type: "text", text: system, cache_control: CACHE }],
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "text", text: prompt, cache_control: CACHE },
-              ...(followUp ? [{ type: "text" as const, text: followUp }] : []),
-            ],
-          },
-        ],
-      });
+      const worstCase = worstCaseMicros({ promptChars: system.length + prompt.length + (followUp?.length ?? 0), maxTokens, extraTokens: SCHEMA_TOKENS });
+      const response = await metered(await db(), worstCase, () =>
+        client.messages.parse({
+          model,
+          max_tokens: maxTokens,
+          thinking: { type: "adaptive" },
+          output_config: { effort, format: zodOutputFormat(schema) },
+          system: [{ type: "text", text: system, cache_control: CACHE }],
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: prompt, cache_control: CACHE },
+                ...(followUp ? [{ type: "text" as const, text: followUp }] : []),
+              ],
+            },
+          ],
+        }),
+      );
       const u = response.usage;
       console.info(`llm ${name} model=${model} in=${u.input_tokens} cache_read=${u.cache_read_input_tokens ?? 0} cache_write=${u.cache_creation_input_tokens ?? 0} out=${u.output_tokens}`);
       if (response.stop_reason === "refusal") {
@@ -108,15 +140,23 @@ export function anthropicLlm(opts: { apiKey?: string } = {}): Llm {
             const text: string[] = [];
             const sources = new Map<string, string>();
             for (let turn = 0; turn < 4; turn++) {
-              const response = await client.messages.create({
-                model,
-                max_tokens: 8000,
-                thinking: { type: "adaptive" },
-                output_config: { effort: "medium" },
-                system: [{ type: "text", text: system, cache_control: CACHE }],
-                tools: [{ type: "web_search_20250305", name: "web_search", max_uses: maxSearches }],
-                messages,
+              const worstCase = worstCaseMicros({
+                promptChars: system.length + JSON.stringify(messages).length,
+                maxTokens: 8000,
+                extraTokens: SEARCH_RESULT_TOKENS,
+                searches: maxSearches,
               });
+              const response = await metered(await db(), worstCase, () =>
+                client.messages.create({
+                  model,
+                  max_tokens: 8000,
+                  thinking: { type: "adaptive" },
+                  output_config: { effort: "medium" },
+                  system: [{ type: "text", text: system, cache_control: CACHE }],
+                  tools: [{ type: "web_search_20250305", name: "web_search", max_uses: maxSearches }],
+                  messages,
+                }),
+              );
               const u = response.usage;
               console.info(`llm ${name} model=${model} in=${u.input_tokens} out=${u.output_tokens} searches=${u.server_tool_use?.web_search_requests ?? 0}`);
               if (response.stop_reason === "refusal") throw new LlmRefusalError(name, response.stop_details?.category ?? null);

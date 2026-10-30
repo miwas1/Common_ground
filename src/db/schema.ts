@@ -200,6 +200,22 @@ export const qlooCache = pgTable("qloo_cache", {
   createdAt: createdAt(),
 });
 
+// ── Model spend ─────────────────────────────────────────────────────────────
+
+/**
+ * Running total of Claude API spend, in millionths of a dollar. One row per budget ("global").
+ * Each call reserves its worst case here before it is sent and settles to the real cost after (src/lib/llm/spend.ts).
+ */
+export const llmSpend = pgTable(
+  "llm_spend",
+  {
+    id: text("id").primaryKey(),
+    spentMicros: integer("spent_micros").notNull().default(0),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [check("llm_spend_nonnegative", sql`${t.spentMicros} >= 0`)],
+);
+
 // ── Evidence and claims ─────────────────────────────────────────────────────
 
 export const evidenceKind = pgEnum("evidence_kind", [

@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import type { FormState } from "@/app/actions";
 import { getDb } from "@/db";
 import { requireAuthorized } from "@/lib/auth/actor";
-import { anthropicLlm } from "@/lib/llm";
+import { anthropicLlm, LlmBudgetError } from "@/lib/llm";
 import { editProposal, ProposalError, simplerVersion, swapCreator, type Deliverable } from "@/lib/proposals/control";
 import { qlooFor } from "@/lib/qloo/server";
 
@@ -21,7 +21,7 @@ async function attempt(fn: () => Promise<string>): Promise<FormState | string> {
   try {
     return await fn();
   } catch (err) {
-    if (err instanceof ProposalError) return { error: err.message };
+    if (err instanceof ProposalError || err instanceof LlmBudgetError) return { error: err.message };
     throw err;
   }
 }

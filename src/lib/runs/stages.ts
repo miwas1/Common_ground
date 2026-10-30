@@ -47,11 +47,3 @@ export async function isCancelRequested(runId: string): Promise<boolean> {
     .limit(1);
   return rows.length > 0;
 }
-
-export async function getRunWithStages(runId: string) {
-  const db = await getDb();
-  const [row] = await db.select().from(run).where(eq(run.id, runId)).limit(1);
-  if (!row) return undefined;
-  const stages = await db.select().from(runStage).where(eq(runStage.runId, runId)).orderBy(runStage.position);
-  return { ...row, stages };
-}

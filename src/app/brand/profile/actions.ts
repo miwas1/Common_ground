@@ -7,7 +7,7 @@ import { getActor, requireAuthorized, UnauthenticatedError } from "@/lib/auth/ac
 import { actingBrandOrg } from "@/lib/auth/brand";
 import { documentText, FACT_KINDS, type FactKind } from "@/lib/brand/extract";
 import { addDocument, addFact, approveAllSuggested, decideFact, ProfileError, removeDocument, removeFact } from "@/lib/brand/profile";
-import { anthropicLlm } from "@/lib/llm";
+import { anthropicLlm, LlmBudgetError } from "@/lib/llm";
 
 const str = (form: FormData, key: string) => String(form.get(key) ?? "").trim();
 /** Under next.config's 4.5 MB server action limit, which matches Vercel's request cap. */
@@ -40,7 +40,7 @@ export async function uploadDocumentAction(_prev: FormState, form: FormData): Pr
     const res = await addDocument(db, anthropicLlm(), org, userId, doc);
     target = `/brand/profile?document=${res.documentId}&found=${res.suggested}&dropped=${res.dropped}${res.truncated ? "&truncated=1" : ""}#review`;
   } catch (err) {
-    if (err instanceof ProfileError) return { error: err.message };
+    if (err instanceof ProfileError || err instanceof LlmBudgetError) return { error: err.message };
     throw err;
   }
   redirect(target);

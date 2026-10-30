@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import { FatalError } from "workflow";
 import { getDb } from "@/db";
 import { campaign as campaignTable } from "@/db/schema";
-import { anthropicLlm, LlmRefusalError, LlmValidationError } from "@/lib/llm";
+import { anthropicLlm, LlmBudgetError, LlmRefusalError, LlmValidationError } from "@/lib/llm";
 import { isCancelRequested, markStage, setRunStatus } from "@/lib/runs/stages";
 import { qlooFor } from "@/lib/qloo/server";
 import { loadRun } from "./context";
@@ -31,7 +31,7 @@ export async function executeStage(runId: string, position: number) {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await markStage(runId, position, stage.name, "error", { error: message });
-    if (err instanceof StageInputError || err instanceof LlmRefusalError || err instanceof LlmValidationError) {
+    if (err instanceof StageInputError || err instanceof LlmRefusalError || err instanceof LlmValidationError || err instanceof LlmBudgetError) {
       throw new FatalError(message);
     }
     throw err;
